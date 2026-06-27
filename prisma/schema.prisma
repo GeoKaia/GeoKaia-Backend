@@ -89,6 +89,7 @@ model Negocio {
   passwordHash    String
   nombreContacto  String
   whatsapp        String
+  totpSecret      String?
   createdAt       DateTime  @default(now())
 
   lugarId         Int?      @unique
