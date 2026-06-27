@@ -1,11 +1,8 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -26,72 +23,62 @@ enum Tier {
 }
 
 model Lugar {
-  id              Int       @id @default(autoincrement())
+  id              Int          @id @default(autoincrement())
   nombre          String
   descripcion     String
   categoria       Categoria
-  tier            Tier      @default(GRATIS)
+  tier            Tier         @default(GRATIS)
   latitud         Float
   longitud        Float
   horarios        String?
   fotoUrl         String?
-
-  // Campos exclusivos del tier premium
-  panoramaUrl     String?   // foto 360 para Pannellum
-  videoUrl        String?   // link de YouTube/TikTok
-  galeriaUrls     String[]  // array de fotos extra
+  panoramaUrl     String?
+  videoUrl        String?
+  galeriaUrls     String[]
   whatsapp        String?
   menuUrl         String?
-
   paradas         ParadaRuta[]
   negocio         Negocio?
-
-  createdAt       DateTime  @default(now())
+  createdAt       DateTime     @default(now())
 }
 
 model Ruta {
-  id                  Int          @id @default(autoincrement())
-  nombre              String       // "Ruta del Arte", "Sendero del Sabor"
-  categoria           String       // tag simple: "arte", "naturaleza", "gastronomia"
-  descripcion         String       // la que ve el turista
-  descripcionParaIA   String       // metadata más detallada, solo para que el agente de IA haga el matching
-
-  paradas             ParadaRuta[]
-
-  createdAt           DateTime     @default(now())
+  id                Int          @id @default(autoincrement())
+  nombre            String
+  categoria         String
+  descripcion       String
+  descripcionParaIA String
+  paradas           ParadaRuta[]
+  createdAt         DateTime     @default(now())
 }
 
 model ParadaRuta {
-  id                    Int     @id @default(autoincrement())
-
-  ruta                  Ruta    @relation(fields: [rutaId], references: [id])
-  rutaId                Int
-
-  lugar                 Lugar   @relation(fields: [lugarId], references: [id])
-  lugarId               Int
-
-  orden                 Int     // posición dentro de la ruta: 1, 2, 3...
-  minutosAlSiguiente    Int?    // tiempo de traslado a la siguiente parada (null si es la última)
+  id                 Int    @id @default(autoincrement())
+  ruta               Ruta   @relation(fields: [rutaId], references: [id])
+  rutaId             Int
+  lugar              Lugar  @relation(fields: [lugarId], references: [id])
+  lugarId            Int
+  orden              Int
+  minutosAlSiguiente Int?
 }
 
 model Lead {
-  id              Int       @id @default(autoincrement())
-  nombreNegocio   String
-  nombreContacto  String
-  whatsapp        String
-  mensaje         String?
-  createdAt       DateTime  @default(now())
+  id             Int      @id @default(autoincrement())
+  nombreNegocio  String
+  nombreContacto String
+  whatsapp       String
+  mensaje        String?
+  createdAt      DateTime @default(now())
 }
 
 model Negocio {
-  id              Int       @id @default(autoincrement())
-  email           String    @unique
-  passwordHash    String
-  nombreContacto  String
-  whatsapp        String
-  totpSecret      String?
-  createdAt       DateTime  @default(now())
-
-  lugarId         Int?      @unique
-  lugar           Lugar?    @relation(fields: [lugarId], references: [id])
+  id             Int      @id @default(autoincrement())
+  email          String   @unique
+  passwordHash   String
+  nombreContacto String
+  whatsapp       String
+  totpSecret     String?
+  createdAt      DateTime @default(now())
+  lugarId        Int?     @unique
+  lugar          Lugar?   @relation(fields: [lugarId], references: [id])
 }
