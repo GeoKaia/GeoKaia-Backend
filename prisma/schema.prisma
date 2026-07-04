@@ -7,6 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum Categoria {
@@ -23,11 +24,11 @@ enum Tier {
 }
 
 model Lugar {
-  id              Int          @id @default(autoincrement())
+  id              Int           @id @default(autoincrement())
   nombre          String
   descripcion     String
   categoria       Categoria
-  tier            Tier         @default(GRATIS)
+  tier            Tier          @default(GRATIS)
   latitud         Float
   longitud        Float
   horarios        String?
@@ -39,17 +40,19 @@ model Lugar {
   menuUrl         String?
   paradas         ParadaRuta[]
   negocio         Negocio?
-  createdAt       DateTime     @default(now())
+  createdAt       DateTime      @default(now())
 }
 
 model Ruta {
-  id                Int          @id @default(autoincrement())
+  id                Int           @id @default(autoincrement())
   nombre            String
   categoria         String
   descripcion       String
   descripcionParaIA String
   paradas           ParadaRuta[]
-  createdAt         DateTime     @default(now())
+  negocioId         Int           // Corrección: Relación con el Negocio
+  negocio           Negocio       @relation(fields: [negocioId], references: [id])
+  createdAt         DateTime      @default(now())
 }
 
 model ParadaRuta {
@@ -81,4 +84,5 @@ model Negocio {
   createdAt      DateTime @default(now())
   lugarId        Int?     @unique
   lugar          Lugar?   @relation(fields: [lugarId], references: [id])
+  rutas          Ruta[]   // Relación inversa para que el Negocio vea sus rutas
 }
