@@ -43,15 +43,13 @@ model Lugar {
 }
 
 model Ruta {
-  id                Int           @id @default(autoincrement())
+  id                Int          @id @default(autoincrement())
   nombre            String
   categoria         String
   descripcion       String
   descripcionParaIA String
   paradas           ParadaRuta[]
-  negocioId         Int           // Corrección: Relación con el Negocio
-  negocio           Negocio       @relation(fields: [negocioId], references: [id])
-  createdAt         DateTime      @default(now())
+  createdAt         DateTime     @default(now())
 }
 
 model ParadaRuta {
@@ -83,5 +81,4 @@ model Negocio {
   createdAt      DateTime @default(now())
   lugarId        Int?     @unique
   lugar          Lugar?   @relation(fields: [lugarId], references: [id])
-  rutas          Ruta[]   // Relación inversa para que el Negocio vea sus rutas
 }
