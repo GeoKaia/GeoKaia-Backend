@@ -1,3 +1,10 @@
+# GeoKaia Backend
+
+[![Known Vulnerabilities](https://snyk.io/test/github/GeoKaia/GeoKaia-Backend/badge.svg)](https://snyk.io/test/github/GeoKaia/GeoKaia-Backend)
+
+API REST del sistema GeoKaia — Plataforma de turismo digital para Nicaragua.
+Deployada en: https://geokaia-backend.onrender.com
+
 # GeoKaia
 
 > Plataforma interactiva de turismo creativo y cultural en Nicaragua que utiliza IA para recomendar rutas curadas y experiencias inmersivas 360°.
