@@ -8,7 +8,14 @@ const prisma = new PrismaClient({ adapter });
 
 exports.obtenerTodas = async (req, res) => {
   try {
-    const rutas = await prisma.ruta.findMany();
+    const rutas = await prisma.ruta.findMany({
+      include: {
+        paradas: {
+          include: { lugar: true },
+          orderBy: { orden: 'asc' },
+        },
+      },
+    });
     res.json(rutas);
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener las rutas: ' + error.message });
@@ -17,17 +24,25 @@ exports.obtenerTodas = async (req, res) => {
 
 exports.crear = async (req, res) => {
   try {
-    // Nota: Ajusta estos campos si tu schema.prisma tiene nombres diferentes para la Ruta
-    const { nombre, descripcion, tiempoEstimado } = req.body;
+    const { nombre, categoria, descripcion, descripcionParaIA } = req.body;
     
-    // Inyectado por tu middleware de autenticación
-    const negocioId = req.negocio.id;
+    // Validación de seguridad para que Prisma no crashee si llega un campo vacío
+    if (!nombre || !categoria || !descripcion || !descripcionParaIA) {
+      return res.status(400).json({ error: 'Todos los campos de la ruta son obligatorios' });
+    }
+    
+    // Inyectado por el middleware de autenticación (agregamos el ? por seguridad)
+    const negocioId = req.negocio?.id;
+    if (!negocioId) {
+      return res.status(401).json({ error: 'No autorizado: Falta token de negocio' });
+    }
 
     const nuevaRuta = await prisma.ruta.create({
       data: {
         nombre,
+        categoria,
         descripcion,
-        tiempoEstimado,
+        descripcionParaIA,
         negocio: {
           connect: { id: negocioId }
         }
