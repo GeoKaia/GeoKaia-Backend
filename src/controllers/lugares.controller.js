@@ -85,3 +85,58 @@ exports.crear = async (req, res) => {
     res.status(500).json({ error: 'Error al crear el lugar: ' + error.message });
   }
 };
+
+// 4. Obtener el lugar del negocio autenticado (para precargar el panel de edición)
+exports.obtenerMiLugar = async (req, res) => {
+  try {
+    const negocioId = req.negocio?.id;
+    if (!negocioId) {
+      return res.status(401).json({ error: 'No autorizado: No se detectó un negocio válido en la sesión' });
+    }
+
+    const negocio = await prisma.negocio.findUnique({
+      where: { id: negocioId },
+      include: { lugar: true },
+    });
+
+    if (!negocio?.lugar) {
+      return res.status(404).json({ error: 'Este negocio todavía no tiene un lugar asociado' });
+    }
+
+    res.json(negocio.lugar);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener el lugar: ' + error.message });
+  }
+};
+
+// 5. Editar el contenido (foto, video, galería, etc.) del lugar del negocio autenticado
+exports.actualizarMiLugar = async (req, res) => {
+  try {
+    const negocioId = req.negocio?.id;
+    if (!negocioId) {
+      return res.status(401).json({ error: 'No autorizado: No se detectó un negocio válido en la sesión' });
+    }
+
+    const negocio = await prisma.negocio.findUnique({ where: { id: negocioId } });
+    if (!negocio?.lugarId) {
+      return res.status(404).json({ error: 'Este negocio todavía no tiene un lugar asociado. Creá uno primero con POST /api/lugares' });
+    }
+
+    // Whitelist explícito: aunque llegue basura extra en el body (nombre, categoria, etc.)
+    // solo se actualizan los campos de contenido. Los campos no enviados quedan como undefined
+    // y Prisma los ignora, permitiendo updates parciales.
+    const { descripcion, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl } = req.body;
+
+    const lugarActualizado = await prisma.lugar.update({
+      where: { id: negocio.lugarId },
+      data: { descripcion, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl },
+    });
+
+    res.json({
+      mensaje: 'Contenido del lugar actualizado exitosamente',
+      lugar: lugarActualizado
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar el lugar: ' + error.message });
+  }
+};
