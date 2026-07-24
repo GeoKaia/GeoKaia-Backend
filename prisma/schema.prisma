@@ -27,6 +27,9 @@ model Lugar {
   nombre          String
   descripcion     String
   categoria       Categoria
+  // Etiqueta libre dentro de la categoria (ej. "Catedrales", "Reservas naturales") para la leyenda del mapa.
+  // Texto libre a propósito: permite sumar nuevas etiquetas sin otra migración.
+  subcategoria    String?
   tier            Tier          @default(GRATIS)
   latitud         Float
   longitud        Float
