@@ -49,7 +49,7 @@ exports.obtenerPorId = async (req, res) => {
 // 3. Crear un nuevo lugar vinculado al negocio autenticado
 exports.crear = async (req, res) => {
   try {
-    const { nombre, descripcion, categoria, latitud, longitud } = req.body;
+    const { nombre, descripcion, categoria, subcategoria, latitud, longitud } = req.body;
 
     // Validación básica de campos requeridos para evitar fallos de base de datos
     if (!nombre || !descripcion || !categoria || latitud === undefined || longitud === undefined) {
@@ -62,13 +62,14 @@ exports.crear = async (req, res) => {
       return res.status(401).json({ error: 'No autorizado: No se detectó un negocio válido en la sesión' });
     }
 
-    // Prisma 7 es sumamente estricto con los tipos de datos. 
+    // Prisma 7 es sumamente estricto con los tipos de datos.
     // Convertimos lat/long a Float y forzamos la categoría a mayúsculas para que coincida exactamente con el Enum del schema.
     const nuevoLugar = await prisma.lugar.create({
       data: {
         nombre,
         descripcion,
-        categoria: categoria.toUpperCase(), 
+        categoria: categoria.toUpperCase(),
+        subcategoria: subcategoria || null,
         latitud: parseFloat(latitud),
         longitud: parseFloat(longitud),
         negocio: {
@@ -125,11 +126,11 @@ exports.actualizarMiLugar = async (req, res) => {
     // Whitelist explícito: aunque llegue basura extra en el body (nombre, categoria, etc.)
     // solo se actualizan los campos de contenido. Los campos no enviados quedan como undefined
     // y Prisma los ignora, permitiendo updates parciales.
-    const { descripcion, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl } = req.body;
+    const { descripcion, subcategoria, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl } = req.body;
 
     const lugarActualizado = await prisma.lugar.update({
       where: { id: negocio.lugarId },
-      data: { descripcion, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl },
+      data: { descripcion, subcategoria, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl },
     });
 
     res.json({
