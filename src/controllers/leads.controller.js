@@ -8,10 +8,10 @@ const prisma = new PrismaClient({ adapter });
 
 exports.crearLead = async (req, res) => {
   try {
-    const { nombre, email, negocio } = req.body;
-    
+    const { nombreNegocio, nombreContacto, whatsapp, mensaje } = req.body;
+
     const nuevoLead = await prisma.lead.create({
-      data: { nombre, email, negocio }
+      data: { nombreNegocio, nombreContacto, whatsapp, mensaje }
     });
 
     res.status(201).json({ mensaje: '¡Gracias! Nos pondremos en contacto pronto.', lead: nuevoLead });
