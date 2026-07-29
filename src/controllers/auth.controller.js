@@ -57,6 +57,38 @@ exports.login = async (req, res) => {
   }
 };
 
+exports.eliminarCuenta = async (req, res) => {
+  const { password } = req.body;
+  try {
+    const negocio = await prisma.negocio.findUnique({ where: { id: req.negocio.id } });
+    if (!negocio) return res.status(404).json({ error: 'Negocio no encontrado' });
+
+    // La cuenta administradora del equipo nunca se puede borrar desde este endpoint.
+    if (negocio.email === 'geokaia404@gmail.com') {
+      return res.status(403).json({ error: 'Esta cuenta no se puede eliminar' });
+    }
+
+    const valida = await bcrypt.compare(password, negocio.passwordHash);
+    if (!valida) return res.status(401).json({ error: 'Contraseña incorrecta' });
+
+    await prisma.$transaction(async (tx) => {
+      // El Negocio tiene la FK hacia Lugar, así que hay que soltarla (borrando el Negocio)
+      // antes de poder borrar el Lugar y sus paradas de ruta.
+      if (negocio.lugarId) {
+        await tx.paradaRuta.deleteMany({ where: { lugarId: negocio.lugarId } });
+      }
+      await tx.negocio.delete({ where: { id: negocio.id } });
+      if (negocio.lugarId) {
+        await tx.lugar.delete({ where: { id: negocio.lugarId } });
+      }
+    });
+
+    res.json({ mensaje: 'Cuenta eliminada correctamente' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 exports.verificar2FA = async (req, res) => {
   const { negocioId, token } = req.body;
   try {
