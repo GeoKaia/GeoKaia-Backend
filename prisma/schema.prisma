@@ -15,6 +15,7 @@ enum Categoria {
   NATURALEZA
   HISTORIA
   ARTESANIA
+  ALOJAMIENTO
 }
 
 enum Tier {
@@ -49,6 +50,7 @@ model Lugar {
   galeriaUrls     String[]
   whatsapp        String?
   menuUrl         String?
+  audioUrl        String?
   paradas         ParadaRuta[]
   negocio         Negocio?
   createdAt       DateTime      @default(now())

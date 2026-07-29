@@ -1,3 +1,4 @@
+const bcrypt = require('bcrypt');
 const { PrismaClient } = require('@prisma/client');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
@@ -50,12 +51,16 @@ exports.obtenerPorId = async (req, res) => {
 // 3. Crear un nuevo lugar vinculado al negocio autenticado
 exports.crear = async (req, res) => {
   try {
-    const { nombre, descripcion, categoria, subcategoria, latitud, longitud } = req.body;
+    const { nombre, descripcion, categoria, subcategoria, latitud, longitud, tier } = req.body;
 
     // Validación básica de campos requeridos para evitar fallos de base de datos
     if (!nombre || !descripcion || !categoria || latitud === undefined || longitud === undefined) {
       return res.status(400).json({ error: 'Todos los campos básicos son obligatorios' });
     }
+
+    // Todavia no hay cobro real: el tier elegido en el mockup de pago se acepta tal cual.
+    // Cualquier valor que no sea GRATIS/PREMIUM cae al default seguro (GRATIS).
+    const tierElegido = ['GRATIS', 'PREMIUM'].includes(tier?.toUpperCase()) ? tier.toUpperCase() : 'GRATIS';
 
     // Extraemos de forma segura el ID del negocio inyectado por tu middleware de autenticación
     const negocioId = req.negocio?.id;
@@ -79,6 +84,7 @@ exports.crear = async (req, res) => {
         descripcion,
         categoria: categoria.toUpperCase(),
         subcategoria: subcategoria || null,
+        tier: tierElegido,
         latitud: parseFloat(latitud),
         longitud: parseFloat(longitud),
         estado: 'PENDIENTE',
@@ -128,7 +134,10 @@ exports.actualizarMiLugar = async (req, res) => {
       return res.status(401).json({ error: 'No autorizado: No se detectó un negocio válido en la sesión' });
     }
 
-    const negocio = await prisma.negocio.findUnique({ where: { id: negocioId } });
+    const negocio = await prisma.negocio.findUnique({
+      where: { id: negocioId },
+      include: { lugar: true },
+    });
     if (!negocio?.lugarId) {
       return res.status(404).json({ error: 'Este negocio todavía no tiene un lugar asociado. Creá uno primero con POST /api/lugares' });
     }
@@ -136,11 +145,21 @@ exports.actualizarMiLugar = async (req, res) => {
     // Whitelist explícito: aunque llegue basura extra en el body (nombre, categoria, etc.)
     // solo se actualizan los campos de contenido. Los campos no enviados quedan como undefined
     // y Prisma los ignora, permitiendo updates parciales.
-    const { descripcion, subcategoria, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl } = req.body;
+    let { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl } = req.body;
+
+    // El frontend ya oculta estos campos para un lugar GRATIS, pero los ignoramos
+    // también acá por si alguien le pega directo a la API sin pasar por la UI.
+    if (negocio.lugar.tier === 'GRATIS') {
+      panoramaUrl = undefined;
+      videoUrl = undefined;
+      galeriaUrls = undefined;
+      menuUrl = undefined;
+      audioUrl = undefined;
+    }
 
     const lugarActualizado = await prisma.lugar.update({
       where: { id: negocio.lugarId },
-      data: { descripcion, subcategoria, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl },
+      data: { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl },
     });
 
     res.json({
@@ -152,7 +171,39 @@ exports.actualizarMiLugar = async (req, res) => {
   }
 };
 
-// 6. [Admin] Listar lugares pendientes de aprobación
+// 6. Borrar el lugar del negocio autenticado (mantiene la cuenta/login, solo borra el listing)
+exports.eliminarMiLugar = async (req, res) => {
+  const { password } = req.body;
+  try {
+    const negocioId = req.negocio?.id;
+    if (!negocioId) {
+      return res.status(401).json({ error: 'No autorizado: No se detectó un negocio válido en la sesión' });
+    }
+
+    const negocio = await prisma.negocio.findUnique({ where: { id: negocioId } });
+    if (!negocio?.lugarId) {
+      return res.status(404).json({ error: 'Este negocio no tiene un lugar registrado' });
+    }
+
+    const valida = await bcrypt.compare(password, negocio.passwordHash);
+    if (!valida) return res.status(401).json({ error: 'Contraseña incorrecta' });
+
+    const lugarId = negocio.lugarId;
+    await prisma.$transaction(async (tx) => {
+      // Mismo orden que en auth.controller.js eliminarCuenta: hay que soltar las FK
+      // (ParadaRuta y Negocio.lugarId) antes de poder borrar el Lugar.
+      await tx.paradaRuta.deleteMany({ where: { lugarId } });
+      await tx.negocio.update({ where: { id: negocioId }, data: { lugarId: null } });
+      await tx.lugar.delete({ where: { id: lugarId } });
+    });
+
+    res.json({ mensaje: 'Lugar eliminado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar el lugar: ' + error.message });
+  }
+};
+
+// 7. [Admin] Listar lugares pendientes de aprobación
 exports.obtenerPendientes = async (req, res) => {
   try {
     const lugares = await prisma.lugar.findMany({
@@ -168,7 +219,7 @@ exports.obtenerPendientes = async (req, res) => {
   }
 };
 
-// 7. [Admin] Aprobar o rechazar un lugar
+// 8. [Admin] Aprobar o rechazar un lugar
 exports.actualizarEstado = async (req, res) => {
   try {
     const { estado } = req.body;
