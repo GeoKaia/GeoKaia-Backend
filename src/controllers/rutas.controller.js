@@ -37,15 +37,14 @@ exports.crear = async (req, res) => {
       return res.status(401).json({ error: 'No autorizado: Falta token de negocio' });
     }
 
+    // Ruta no tiene dueño (no hay relación Negocio<->Ruta en el schema) - solo se exige
+    // estar logueado como negocio para crear una, no que la ruta le pertenezca a nadie.
     const nuevaRuta = await prisma.ruta.create({
       data: {
         nombre,
         categoria,
         descripcion,
         descripcionParaIA,
-        negocio: {
-          connect: { id: negocioId }
-        }
       }
     });
 
