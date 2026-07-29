@@ -34,6 +34,9 @@ exports.registrar = async (req, res) => {
       negocioId: negocio.id,
     });
   } catch (err) {
+    if (err.code === 'P2002') {
+      return res.status(409).json({ error: 'Ese correo ya está registrado. Iniciá sesión en vez de crear una cuenta nueva.' });
+    }
     res.status(500).json({ error: err.message });
   }
 };
