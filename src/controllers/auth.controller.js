@@ -14,6 +14,9 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 exports.registrar = async (req, res) => {
+  // A propósito solo desestructuramos estos 4 campos: aunque alguien mande "esAdmin" en
+  // el body, se ignora. La única cuenta admin (ver scripts/set-admin-password.js) se marca
+  // a mano en la base — el registro público jamás puede crear otra.
   const { email, password, nombreContacto, whatsapp } = req.body;
   try {
     const passwordHash = await bcrypt.hash(password, 10);
