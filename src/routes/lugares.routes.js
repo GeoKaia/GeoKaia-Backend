@@ -4,6 +4,7 @@ const { z } = require('zod');
 const validate = require('../middleware/validate.middleware');
 const lugaresController = require('../controllers/lugares.controller');
 const authMiddleware = require('../middleware/auth.middleware'); // Traemos al guardia
+const adminMiddleware = require('../middleware/admin.middleware');
 
 // Reglas para editar el contenido del lugar del negocio autenticado.
 // Todos los campos son opcionales (PATCH = actualización parcial), pero debe venir al menos uno.
@@ -21,12 +22,19 @@ const actualizarLugarSchema = z.object({
   message: 'Debés enviar al menos un campo para actualizar',
 });
 
-// IMPORTANTE: '/mi-lugar' va antes de '/:id' para que Express no lo confunda con un ID
+// [Admin] aprobar/rechazar un lugar
+const actualizarEstadoSchema = z.object({
+  estado: z.enum(['PENDIENTE', 'APROBADO', 'RECHAZADO']),
+});
+
+// IMPORTANTE: '/mi-lugar' y '/admin/*' van antes de '/:id' para que Express no las confunda con un ID
 router.get('/', lugaresController.obtenerTodos);
 router.get('/mi-lugar', authMiddleware, lugaresController.obtenerMiLugar);
+router.get('/admin/pendientes', authMiddleware, adminMiddleware, lugaresController.obtenerPendientes);
 router.get('/:id', lugaresController.obtenerPorId);
 
 router.post('/', authMiddleware, lugaresController.crear);
 router.patch('/mi-lugar', authMiddleware, validate(actualizarLugarSchema), lugaresController.actualizarMiLugar);
+router.patch('/admin/:id/estado', authMiddleware, adminMiddleware, validate(actualizarEstadoSchema), lugaresController.actualizarEstado);
 
 module.exports = router;

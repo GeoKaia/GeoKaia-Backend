@@ -22,6 +22,12 @@ enum Tier {
   PREMIUM
 }
 
+enum EstadoLugar {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
 model Lugar {
   id              Int           @id @default(autoincrement())
   nombre          String
@@ -31,6 +37,9 @@ model Lugar {
   // Texto libre a propósito: permite sumar nuevas etiquetas sin otra migración.
   subcategoria    String?
   tier            Tier          @default(GRATIS)
+  // Default APROBADO para no esconder los lugares que ya existian antes de este campo.
+  // Los lugares que un negocio registra desde el panel se crean en PENDIENTE explicitamente.
+  estado          EstadoLugar   @default(APROBADO)
   latitud         Float
   longitud        Float
   horarios        String?
@@ -81,6 +90,7 @@ model Negocio {
   nombreContacto String
   whatsapp       String
   totpSecret     String?
+  esAdmin        Boolean  @default(false)
   createdAt      DateTime @default(now())
   lugarId        Int?     @unique
   lugar          Lugar?   @relation(fields: [lugarId], references: [id])

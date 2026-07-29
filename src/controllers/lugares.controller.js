@@ -7,10 +7,11 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
-// 1. Obtener todos los lugares
+// 1. Obtener todos los lugares aprobados (publico: mapa, chat de Kaia, rutas)
 exports.obtenerTodos = async (req, res) => {
   try {
     const lugares = await prisma.lugar.findMany({
+      where: { estado: 'APROBADO' },
       orderBy: {
         nombre: 'asc', // Orden alfabético para facilitarle el pintado de pines al mapa en el frontend
       },
@@ -62,8 +63,16 @@ exports.crear = async (req, res) => {
       return res.status(401).json({ error: 'No autorizado: No se detectó un negocio válido en la sesión' });
     }
 
+    // Un negocio solo puede tener un lugar (Negocio.lugarId es unico) - evitamos que una segunda
+    // llamada a este endpoint le desconecte silenciosamente su lugar actual.
+    const negocioExistente = await prisma.negocio.findUnique({ where: { id: negocioId } });
+    if (negocioExistente?.lugarId) {
+      return res.status(409).json({ error: 'Tu negocio ya tiene un lugar registrado. Editalo desde el panel en vez de crear uno nuevo.' });
+    }
+
     // Prisma 7 es sumamente estricto con los tipos de datos.
     // Convertimos lat/long a Float y forzamos la categoría a mayúsculas para que coincida exactamente con el Enum del schema.
+    // Queda en PENDIENTE hasta que el equipo de GeoKaia lo revise y apruebe.
     const nuevoLugar = await prisma.lugar.create({
       data: {
         nombre,
@@ -72,6 +81,7 @@ exports.crear = async (req, res) => {
         subcategoria: subcategoria || null,
         latitud: parseFloat(latitud),
         longitud: parseFloat(longitud),
+        estado: 'PENDIENTE',
         negocio: {
           connect: { id: negocioId }
         }
@@ -79,7 +89,7 @@ exports.crear = async (req, res) => {
     });
 
     res.status(201).json({
-      mensaje: 'Lugar creado exitosamente',
+      mensaje: 'Lugar creado. Va a aparecer en el mapa cuando el equipo de GeoKaia lo apruebe.',
       lugar: nuevoLugar
     });
   } catch (error) {
@@ -139,5 +149,40 @@ exports.actualizarMiLugar = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Error al actualizar el lugar: ' + error.message });
+  }
+};
+
+// 6. [Admin] Listar lugares pendientes de aprobación
+exports.obtenerPendientes = async (req, res) => {
+  try {
+    const lugares = await prisma.lugar.findMany({
+      where: { estado: 'PENDIENTE' },
+      include: {
+        negocio: { select: { email: true, nombreContacto: true, whatsapp: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    res.json(lugares);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener los lugares pendientes: ' + error.message });
+  }
+};
+
+// 7. [Admin] Aprobar o rechazar un lugar
+exports.actualizarEstado = async (req, res) => {
+  try {
+    const { estado } = req.body;
+    if (!['APROBADO', 'RECHAZADO', 'PENDIENTE'].includes(estado)) {
+      return res.status(400).json({ error: 'Estado inválido' });
+    }
+
+    const lugar = await prisma.lugar.update({
+      where: { id: parseInt(req.params.id) },
+      data: { estado },
+    });
+
+    res.json({ mensaje: `Lugar marcado como ${estado}`, lugar });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar el estado: ' + error.message });
   }
 };
