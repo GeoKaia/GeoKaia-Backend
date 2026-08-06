@@ -62,6 +62,9 @@ model Ruta {
   categoria         String
   descripcion       String
   descripcionParaIA String
+  fotoUrl           String?
+  emoji             String?
+  color             String?
   paradas           ParadaRuta[]
   createdAt         DateTime     @default(now())
 }
@@ -74,6 +77,7 @@ model ParadaRuta {
   lugarId            Int
   orden              Int
   minutosAlSiguiente Int?
+  distanciaKm        Float?
 }
 
 model Lead {
