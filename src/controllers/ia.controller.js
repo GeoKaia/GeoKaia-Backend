@@ -60,8 +60,11 @@ Respondé ÚNICAMENTE con un JSON válido con este formato exacto, sin texto adi
   "mensaje": "Un mensaje amigable de 1-2 oraciones para el turista"
 }`;
 
+    // llama-3.3-70b-versatile fue retirado del catálogo de Groq. openai/gpt-oss-20b
+    // devuelve el mismo JSON limpio y es un modelo chico -> menos cómputo, en línea
+    // con el argumento de sostenibilidad del pitch (LPUs de Groq + modelo liviano).
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: 'openai/gpt-oss-20b',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
     });
