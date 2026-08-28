@@ -145,7 +145,7 @@ exports.actualizarMiLugar = async (req, res) => {
     // Whitelist explícito: aunque llegue basura extra en el body (nombre, categoria, etc.)
     // solo se actualizan los campos de contenido. Los campos no enviados quedan como undefined
     // y Prisma los ignora, permitiendo updates parciales.
-    let { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl } = req.body;
+    let { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, mapsUrl, wazeUrl, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl } = req.body;
 
     // El frontend ya oculta estos campos para un lugar GRATIS, pero los ignoramos
     // también acá por si alguien le pega directo a la API sin pasar por la UI.
@@ -159,7 +159,7 @@ exports.actualizarMiLugar = async (req, res) => {
 
     const lugarActualizado = await prisma.lugar.update({
       where: { id: negocio.lugarId },
-      data: { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl },
+      data: { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, mapsUrl, wazeUrl, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl },
     });
 
     res.json({

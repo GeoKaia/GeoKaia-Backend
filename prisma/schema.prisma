@@ -44,6 +44,11 @@ model Lugar {
   latitud         Float
   longitud        Float
   horarios        String?
+  // Opcionales: si el negocio no las carga, el frontend arma un link genérico a
+  // partir de latitud/longitud. Están acá para que puedan pisar ese default con su
+  // ficha real de Google Maps o un link de Waze puntual (más preciso que el pin).
+  mapsUrl         String?
+  wazeUrl         String?
   fotoUrl         String?
   panoramaUrl     String?
   videoUrl        String?
