@@ -16,6 +16,8 @@ const actualizarLugarSchema = z.object({
   descripcion: z.string().min(10, 'La descripción debe tener al menos 10 caracteres').optional(),
   subcategoria: z.string().min(2, 'La subcategoría es muy corta').optional(),
   horarios: z.string().optional(),
+  mapsUrl: z.string().url('mapsUrl debe ser una URL válida').optional(),
+  wazeUrl: z.string().url('wazeUrl debe ser una URL válida').optional(),
   fotoUrl: z.string().url('fotoUrl debe ser una URL válida').optional(),
   panoramaUrl: z.string().url('panoramaUrl debe ser una URL válida').optional(),
   videoUrl: z.string().url('videoUrl debe ser una URL válida').optional(),
