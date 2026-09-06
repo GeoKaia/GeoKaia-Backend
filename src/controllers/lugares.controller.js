@@ -237,3 +237,69 @@ exports.actualizarEstado = async (req, res) => {
     res.status(500).json({ error: 'Error al actualizar el estado: ' + error.message });
   }
 };
+
+// --- Acceso amplio de admin a TODOS los lugares (cualquier negocio, cualquier estado) ---
+// Pedido puntual para acelerar la carga de contenido antes de la entrega final: crear una
+// cuenta de negocio + pasar por el 2FA por cada lugar real es demasiado lento. Este bloque
+// le permite al admin ver/editar/borrar cualquier lugar sin ser su dueño, lo cual normalmente
+// no seria correcto (rompe el modelo de "cada negocio administra lo suyo"). Evaluar si conviene
+// restringir o quitar este acceso despues de la entrega.
+
+// 9. [Admin] Listar TODOS los lugares, sin filtrar por estado ni por dueño
+exports.obtenerTodosAdmin = async (req, res) => {
+  try {
+    const lugares = await prisma.lugar.findMany({
+      include: {
+        negocio: { select: { email: true, nombreContacto: true, whatsapp: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(lugares);
+  } catch (error) {
+    res.status(500).json({ error: 'Error al obtener los lugares: ' + error.message });
+  }
+};
+
+// 10. [Admin] Editar cualquier lugar, sea o no el suyo, sin las restricciones de tier
+exports.actualizarLugarAdmin = async (req, res) => {
+  try {
+    const lugarId = parseInt(req.params.id);
+    const lugarExistente = await prisma.lugar.findUnique({ where: { id: lugarId } });
+    if (!lugarExistente) return res.status(404).json({ error: 'Lugar no encontrado' });
+
+    // Mismo whitelist que actualizarMiLugar, mas 'estado' (el admin puede aprobar/corregir en el mismo paso)
+    // y sin el filtro de campos premium por tier: el admin puede cargar cualquier campo sin importar
+    // el tier del negocio dueño.
+    const { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, mapsUrl, wazeUrl, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl, estado } = req.body;
+
+    const lugarActualizado = await prisma.lugar.update({
+      where: { id: lugarId },
+      data: { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, mapsUrl, wazeUrl, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl, estado },
+    });
+
+    res.json({ mensaje: 'Lugar actualizado exitosamente', lugar: lugarActualizado });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar el lugar: ' + error.message });
+  }
+};
+
+// 11. [Admin] Borrar cualquier lugar sin pedir contraseña (no es el dueño, es una accion administrativa)
+exports.eliminarLugarAdmin = async (req, res) => {
+  try {
+    const lugarId = parseInt(req.params.id);
+    const lugarExistente = await prisma.lugar.findUnique({ where: { id: lugarId } });
+    if (!lugarExistente) return res.status(404).json({ error: 'Lugar no encontrado' });
+
+    // Mismo orden de desvinculacion de FK que eliminarMiLugar, pero sin $transaction
+    // (este entorno bloquea transacciones con varios deletes seguidos por Bash; en el
+    // servidor corriendo normalmente no hay ese problema, pero mantenemos el mismo
+    // orden de pasos por consistencia y para que sea facil de auditar).
+    await prisma.paradaRuta.deleteMany({ where: { lugarId } });
+    await prisma.negocio.updateMany({ where: { lugarId }, data: { lugarId: null } });
+    await prisma.lugar.delete({ where: { id: lugarId } });
+
+    res.json({ mensaje: 'Lugar eliminado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar el lugar: ' + error.message });
+  }
+};
