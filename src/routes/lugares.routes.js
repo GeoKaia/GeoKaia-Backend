@@ -5,6 +5,18 @@ const validate = require('../middleware/validate.middleware');
 const lugaresController = require('../controllers/lugares.controller');
 const authMiddleware = require('../middleware/auth.middleware'); // Traemos al guardia
 const adminMiddleware = require('../middleware/admin.middleware');
+const { esUrlDeFotoValida, esUrlDeGoogleMaps, esUrlDeWaze } = require('../utils/validarUrls');
+
+// Estos tres son campos compartidos por GRATIS y PREMIUM — sin verificar que el link
+// sea realmente lo que dice ser, un negocio del plan Gratuito podría pegar cualquier
+// URL ahí (un video, una red social, lo que sea) y de hecho estar usando esos campos
+// como si fueran contenido premium. Si eso vale, no tiene sentido vender el plan pago.
+const fotoUrlSchema = z.string().url('fotoUrl debe ser una URL válida')
+  .refine(esUrlDeFotoValida, 'La URL no parece ser una foto real (¿es un link a un video o una red social?)');
+const mapsUrlSchema = z.string().url('mapsUrl debe ser una URL válida')
+  .refine(esUrlDeGoogleMaps, 'mapsUrl tiene que ser un link de Google Maps');
+const wazeUrlSchema = z.string().url('wazeUrl debe ser una URL válida')
+  .refine(esUrlDeWaze, 'wazeUrl tiene que ser un link de Waze');
 
 // Reglas para editar el contenido del lugar del negocio autenticado.
 // Todos los campos son opcionales (PATCH = actualización parcial), pero debe venir al menos uno.
@@ -16,12 +28,12 @@ const actualizarLugarSchema = z.object({
   descripcion: z.string().min(10, 'La descripción debe tener al menos 10 caracteres').optional(),
   subcategoria: z.string().min(2, 'La subcategoría es muy corta').optional(),
   horarios: z.string().optional(),
-  mapsUrl: z.string().url('mapsUrl debe ser una URL válida').optional(),
-  wazeUrl: z.string().url('wazeUrl debe ser una URL válida').optional(),
-  fotoUrl: z.string().url('fotoUrl debe ser una URL válida').optional(),
+  mapsUrl: mapsUrlSchema.optional(),
+  wazeUrl: wazeUrlSchema.optional(),
+  fotoUrl: fotoUrlSchema.optional(),
   panoramaUrl: z.string().url('panoramaUrl debe ser una URL válida').optional(),
   videoUrl: z.string().url('videoUrl debe ser una URL válida').optional(),
-  galeriaUrls: z.array(z.string().url('Cada elemento de galeriaUrls debe ser una URL válida')).max(5, 'Máximo 5 fotos adicionales').optional(),
+  galeriaUrls: z.array(fotoUrlSchema).max(5, 'Máximo 5 fotos adicionales').optional(),
   whatsapp: z.string().min(8, 'El número de WhatsApp es muy corto').optional(),
   menuUrl: z.string().url('menuUrl debe ser una URL válida').optional(),
   audioUrl: z.string().url('audioUrl debe ser una URL válida').optional(),
