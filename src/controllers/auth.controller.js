@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
+const { TERMINOS_VERSION } = require('../config/legal');
 
 // Nuevas importaciones obligatorias para Prisma 7
 const { PrismaClient } = require('@prisma/client');
@@ -28,6 +29,10 @@ exports.registrar = async (req, res) => {
         nombreContacto,
         whatsapp,
         totpSecret: secret.base32,
+        // La aceptación ya vino validada en true por registrarSchema. La versión y la fecha las
+        // pone el servidor: no se confía en lo que mande el cliente.
+        aceptoTerminosEn: new Date(),
+        terminosVersion: TERMINOS_VERSION,
       },
     });
     const qrUrl = await qrcode.toDataURL(secret.otpauth_url);
