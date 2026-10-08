@@ -9,6 +9,26 @@ Deployada en: https://geokaia-backend.onrender.com
 
 ---
 
+<h3 align="center">Stack</h3>
+
+<p align="center">
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-20-10546F?style=for-the-badge&logo=nodedotjs&logoColor=white&labelColor=3A2B1D" alt="Node.js 20" /></a>
+  <a href="https://expressjs.com"><img src="https://img.shields.io/badge/Express-5-10546F?style=for-the-badge&logo=express&logoColor=white&labelColor=3A2B1D" alt="Express 5" /></a>
+  <a href="https://www.prisma.io"><img src="https://img.shields.io/badge/Prisma-7-10546F?style=for-the-badge&logo=prisma&logoColor=white&labelColor=3A2B1D" alt="Prisma 7" /></a>
+  <a href="https://www.postgresql.org"><img src="https://img.shields.io/badge/PostgreSQL-15%2B-2989A3?style=for-the-badge&logo=postgresql&logoColor=white&labelColor=3A2B1D" alt="PostgreSQL 15" /></a>
+  <a href="https://neon.com"><img src="https://img.shields.io/badge/Neon-serverless-2989A3?style=for-the-badge&logo=neon&logoColor=white&labelColor=3A2B1D" alt="Neon serverless" /></a>
+</p>
+
+<p align="center">
+  <a href="https://zod.dev"><img src="https://img.shields.io/badge/Zod-4-AC6727?style=for-the-badge&logo=zod&logoColor=white&labelColor=3A2B1D" alt="Zod 4" /></a>
+  <a href="https://jwt.io"><img src="https://img.shields.io/badge/JWT-8h%20%2B%202FA-AC6727?style=for-the-badge&logo=jsonwebtokens&logoColor=white&labelColor=3A2B1D" alt="JWT" /></a>
+  <a href="https://helmetjs.github.io"><img src="https://img.shields.io/badge/Helmet-headers-AC6727?style=for-the-badge&labelColor=3A2B1D" alt="Helmet" /></a>
+  <a href="https://groq.com"><img src="https://img.shields.io/badge/Groq-IA-AC6727?style=for-the-badge&labelColor=3A2B1D" alt="Groq" /></a>
+  <a href="https://render.com"><img src="https://img.shields.io/badge/Render-deploy-3A2B1D?style=for-the-badge&logo=render&logoColor=white&labelColor=3A2B1D" alt="Desplegado en Render" /></a>
+</p>
+
+---
+
 ## Tabla de contenidos
 
 - [Descripción general](#descripción-general)
@@ -50,7 +70,9 @@ Este repo es solo el backend (API REST). El frontend vive en [GeoKaia-Frontend](
 | JWT (jsonwebtoken) | 9.x | Autenticación de negocios, sesión válida por 8 horas |
 | bcrypt | 6.x | Hash de contraseñas |
 | Speakeasy + qrcode | — | Verificación en dos pasos (TOTP / Google Authenticator) |
-| Groq SDK (Llama 3.3 70B) | — | Agente de IA que recomienda rutas existentes según lo que pide el turista |
+| Groq SDK (`openai/gpt-oss-20b`) | — | Agente de IA que recomienda rutas existentes según lo que pide el turista |
+| Helmet | 8.x | Cabeceras HTTP de seguridad |
+| express-rate-limit | 8.x | Límite de peticiones (fuerza bruta y DoS a nivel de aplicación) |
 
 ---
 
@@ -107,15 +129,17 @@ En producción, el proceso se levanta con `node src/index.js` — actualmente de
             | Peticiones HTTP / JSON (fetch)
             v
 [ Enrutamiento y seguridad — Express, este repo ]
-  |-- CORS + parseo de JSON (middlewares globales)
+  |-- helmet (cabeceras) + CORS con lista de orígenes + límite de peticiones por IP
+  |-- parseo de JSON con tope de 50 kb
   |-- authMiddleware (valida JWT) / adminMiddleware (valida rol admin)
-  |-- validate.middleware (valida el body contra un schema de Zod)
+  |-- validate.middleware (valida el body contra un schema de Zod y entrega solo lo validado)
+  |-- limites.middleware (rate limiting por recurso) · validarId.middleware (:id entero)
             |
             v
 [ Controladores — lógica de negocio por entidad ]
   auth · lugares · rutas · ia · leads
             |
-            | Agente recomendador <--> [ Groq API / Llama 3.3 ]
+            | Agente recomendador <--> [ Groq API / gpt-oss-20b ]
             v
 [ Prisma ORM (adapter-pg) ]
             |
@@ -143,7 +167,9 @@ En producción, el proceso se levanta con `node src/index.js` — actualmente de
 | `bcrypt` | Hash y comparación de contraseñas |
 | `speakeasy` | Generación y verificación de códigos TOTP (2FA) |
 | `qrcode` | Genera el QR que el negocio escanea para activar 2FA |
-| `groq-sdk` | Cliente del modelo de IA (Llama 3.3 70B) que recomienda rutas |
+| `groq-sdk` | Cliente del modelo de IA (`openai/gpt-oss-20b`) que recomienda rutas |
+| `helmet` | Cabeceras HTTP de seguridad |
+| `express-rate-limit` | Límite de peticiones por IP / por cuenta |
 | `cors` | Habilita requests cross-origin desde el frontend |
 | `dotenv` | Carga `.env` en `process.env` |
 | `nodemon` *(dev)* | Reinicio automático del servidor en desarrollo |
@@ -160,6 +186,7 @@ Copiá `.env.example` a `.env` y completá:
 | `JWT_SECRET` | Sí | Secreto usado para firmar y verificar los JWT de sesión |
 | `GROQ_API_KEY` | Sí | API Key de Groq, usada por el agente de recomendación de rutas |
 | `PORT` | No | Puerto del servidor. Default `4000` si no se define |
+| `CORS_ORIGINS` | No | Orígenes del navegador autorizados a llamar a la API, separados por coma. Default: `https://geo-kaia-frontend.vercel.app` (`localhost` siempre se permite para desarrollo) |
 
 ---
 
@@ -178,7 +205,12 @@ src/
 ├── middleware/
 │   ├── auth.middleware.js       # Verifica el JWT y adjunta req.negocio
 │   ├── admin.middleware.js      # Verifica esAdmin en la base (no confía en el JWT)
-│   └── validate.middleware.js   # Valida req.body contra un schema de Zod
+│   ├── validate.middleware.js   # Valida req.body contra un schema de Zod y entrega solo lo validado
+│   ├── limites.middleware.js    # Rate limiting: general, login, 2FA, registro, leads, chat de IA
+│   └── validarId.middleware.js  # Rechaza con 400 cualquier :id que no sea un entero positivo
+├── utils/
+│   ├── validarUrls.js           # Verifica que cada link sea http(s) y lo que dice ser (foto, Maps, Waze)
+│   └── errores.js               # Respuesta 500 genérica; el detalle queda solo en el log
 prisma/
 ├── schema.prisma                # Modelo de datos (Negocio, Lugar, Ruta, ParadaRuta, Lead)
 └── migrations/                  # Historial de migraciones versionadas
@@ -207,7 +239,7 @@ Base URL: `https://geokaia-backend.onrender.com` (o `http://localhost:4000` en l
 | Método | Ruta | Acceso | Descripción |
 |---|---|---|---|
 | GET | `/` | 🔓 | Lista los lugares con `estado: APROBADO` (lo que se ve en el mapa público) |
-| GET | `/:id` | 🔓 | Un lugar puntual, con su negocio y las rutas donde aparece |
+| GET | `/:id` | 🔓 | Un lugar aprobado, con las rutas donde aparece (no expone datos del negocio dueño) |
 | GET | `/mi-lugar` | 🔒 | El lugar del negocio autenticado (para precargar su panel) |
 | POST | `/` | 🔒 | Crea el lugar del negocio (tier Gratis/Premium), queda `PENDIENTE` |
 | PATCH | `/mi-lugar` | 🔒 | Edita el contenido del lugar propio (campos premium se ignoran si el tier es Gratis) |
@@ -269,12 +301,22 @@ curl -X PATCH https://geokaia-backend.onrender.com/api/lugares/mi-lugar \
 
 ## Seguridad
 
-- **Validación de entradas**: todo endpoint de escritura pasa por un schema de Zod (`validate.middleware.js`) antes de llegar al controller.
-- **Manejo de errores**: cada controller responde con un `error` descriptivo y el status HTTP correspondiente (400 validación, 401/403 autenticación/autorización, 404 no encontrado, 500 error de servidor) — nunca se cae el proceso.
-- **Roles y permisos**: `authMiddleware` exige un JWT válido; `adminMiddleware` además re-consulta en la base que la cuenta tenga `esAdmin: true` (no confía en el contenido del JWT).
-- **Autenticación en dos factores**: TOTP con `speakeasy`, obligatorio para toda cuenta de negocio.
-- **Expiración de sesión**: el JWT vence a las 8 horas (`expiresIn: '8h'`).
-- **Contraseñas**: se guardan con `bcrypt`, nunca en texto plano.
+La API se protege en capas. Cada una corresponde a un tipo de ataque habitual:
+
+| Amenaza | Defensa en este repo |
+|---|---|
+| **Inyección SQL** | No hay SQL escrito a mano: todo el acceso a datos pasa por Prisma, que envía los valores como parámetros de una consulta preparada (nunca concatenados al texto SQL). Además no se usa `$queryRaw`/`$executeRaw`. Aun así cada entrada se valida antes de llegar al ORM. |
+| **Datos mal formados / mass assignment** | Todo endpoint con cuerpo pasa por un schema de Zod (`validate.middleware.js`): tipos, largos máximos, rangos de coordenadas, enums de categoría y formato del código 2FA. El body validado **reemplaza** al original, así que los campos que no declara el schema se descartan. Los `:id` se validan como enteros (`validarId.middleware.js`). |
+| **XSS almacenado** | Los links que carga un negocio solo se aceptan si son `http://` o `https://` (`utils/validarUrls.js`): `z.string().url()` por sí solo deja pasar `javascript:`. Mapas, Waze y foto se verifican además por dominio/extensión. El frontend repite la comprobación al mostrarlos. |
+| **Fuerza bruta (login y 2FA)** | `express-rate-limit`: 20 intentos fallidos de login por IP cada 15 min; el código 2FA tiene tope por IP (30) **y por cuenta** (8) cada 15 min, porque son solo 10⁶ combinaciones. Login con el mismo mensaje para "correo inexistente" y "contraseña incorrecta" y con comparación bcrypt en ambos casos (sin enumeración de usuarios). |
+| **DoS a nivel de aplicación** | Tope general de 600 peticiones por IP cada 15 min, tope propio para registro, formulario de contacto y chat de IA (20/min, cada consulta cuesta una llamada a Groq), cuerpo máximo de 50 kb, contraseña máxima de 72 caracteres (bcrypt) y timeout de 30 s por petición contra conexiones lentas. Los límites son en memoria: sirven para una instancia; con varias habría que moverlos a Redis. Un ataque volumétrico de red lo absorbe la infraestructura de Render y Vercel, no este código. |
+| **Fuga de información** | Los errores 500 devuelven un mensaje genérico (el detalle queda en el log). `GET /api/lugares/:id` ya no incluye al negocio dueño y solo devuelve lugares aprobados. Rutas inexistentes y JSON inválido responden 404/400 sin trazas. |
+| **Acceso no autorizado** | `authMiddleware` exige un JWT válido (algoritmo HS256 fijado); `adminMiddleware` re-consulta en la base que la cuenta tenga `esAdmin: true` (no confía en el contenido del token). El registro público no puede crear administradores. |
+| **Orígenes no autorizados** | CORS con lista de orígenes (`CORS_ORIGINS`); `helmet` agrega HSTS, `nosniff` y demás cabeceras de seguridad. |
+| **Robo de credenciales** | Contraseñas con `bcrypt`; autenticación en dos factores TOTP (`speakeasy`) obligatoria; el JWT vence a las 8 horas. |
+| **Manipulación de la IA** | La consulta del turista tiene tope de 500 caracteres y la respuesta del modelo se filtra: solo se devuelven rutas que existen en el catálogo, con textos de largo acotado. |
+
+**Limitaciones conocidas:** el paso de 2FA recibe el `negocioId` que devuelve el login, no un token temporal firmado (el límite por cuenta mitiga el abuso, pero un token de "paso 1" sería lo ideal); los límites de peticiones son por instancia; y no hay una suite de pruebas automatizadas, por lo que las defensas se verificaron manualmente con peticiones de ataque contra la API.
 
 ---
 
