@@ -1,3 +1,4 @@
+const { responderError } = require('../utils/errores');
 const { PrismaClient } = require('@prisma/client');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
@@ -17,6 +18,6 @@ module.exports = async (req, res, next) => {
     }
     next();
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    responderError(res, err);
   }
 };

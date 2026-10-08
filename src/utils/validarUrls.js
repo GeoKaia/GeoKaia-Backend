@@ -33,10 +33,19 @@ const HOSTS_PROHIBIDOS_EN_FOTO = [
 
 function obtenerHost(url) {
   try {
-    return new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+    const u = new URL(url);
+    // Solo http(s). z.string().url() acepta 'javascript:alert(1)' como URL válida: sin este filtro, ese
+    // texto guardado en un href o en un iframe ejecutaría código en el navegador de quien lo abra (XSS).
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    return u.hostname.replace(/^www\./, '').toLowerCase();
   } catch {
     return null;
   }
+}
+
+// Para los campos de enlace libres (video, 360°, menú, audio): cualquier sitio, pero solo por http(s).
+function esUrlHttp(url) {
+  return obtenerHost(url) !== null;
 }
 
 // La "foto principal" (fotoUrl) es un campo compartido por ambos tiers: tiene que ser
@@ -70,4 +79,4 @@ function esUrlDeWaze(url) {
   return host === 'waze.com' || host.endsWith('.waze.com');
 }
 
-module.exports = { esUrlDeFotoValida, esUrlDeGoogleMaps, esUrlDeWaze };
+module.exports = { esUrlDeFotoValida, esUrlDeGoogleMaps, esUrlDeWaze, esUrlHttp };

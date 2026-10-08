@@ -1,20 +1,44 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 
-// 1. Importaciones de rutas 
+// 1. Importaciones de rutas
 const iaRoutes = require('./routes/ia.routes');
 const lugaresRoutes = require('./routes/lugares.routes');
 const authRoutes = require('./routes/auth.routes');
 const rutasRoutes = require('./routes/rutas.routes');
 const leadsRoutes = require('./routes/leads.routes');
+const { limiteGeneral } = require('./middleware/limites.middleware');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// 2. Middlewares Globales 
-app.use(cors());
-app.use(express.json());
+// 2. Middlewares Globales
+// Render pone un proxy delante del servidor: sin esto req.ip sería siempre la IP del proxy y el límite de
+// peticiones contaría a todos los visitantes como una sola persona.
+app.set('trust proxy', 1);
+
+// Cabeceras de seguridad estándar (HSTS, nosniff, sin X-Powered-By, etc.).
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+
+// CORS: solo el frontend de producción (y localhost para desarrollo) puede llamar a la API desde un
+// navegador. Para agregar otro dominio, definir CORS_ORIGINS (separados por coma) en el hosting.
+const ORIGENES_PERMITIDOS = (process.env.CORS_ORIGINS || 'https://geo-kaia-frontend.vercel.app')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+const esOrigenLocal = (origen) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origen);
+app.use(
+  cors({
+    origin: (origen, cb) => cb(null, !origen || ORIGENES_PERMITIDOS.includes(origen) || esOrigenLocal(origen)),
+    maxAge: 600,
+  })
+);
+
+// Tope de peticiones por IP (DoS a nivel de aplicación) y de tamaño del cuerpo.
+app.use(limiteGeneral);
+app.use(express.json({ limit: '50kb' }));
 
 // 3. Registro de Rutas
 app.get('/', (req, res) => {
@@ -27,7 +51,29 @@ app.use('/api/auth', authRoutes);
 app.use('/api/rutas', rutasRoutes);
 app.use('/api/leads', leadsRoutes);
 
-// 4. Arranque del servidor
-app.listen(PORT, () => {
+// 4. Errores. Sin esto, una ruta inexistente o un JSON mal formado devolvían la página de error por
+// defecto de Express, que en desarrollo incluye la traza (rutas de archivos y versiones).
+app.use((req, res) => {
+  res.status(404).json({ error: 'Ruta no encontrada' });
+});
+
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'La petición es demasiado grande' });
+  }
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'El cuerpo de la petición no es un JSON válido' });
+  }
+  console.error('[error no controlado]', err);
+  res.status(500).json({ error: 'Error interno del servidor' });
+});
+
+// 5. Arranque del servidor
+const server = app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
+
+// Una petición tiene como máximo 30 s para completarse (la llamada a la IA es la más lenta): evita que
+// conexiones lentas (slowloris) queden abiertas indefinidamente ocupando el servidor.
+server.requestTimeout = 30000;

@@ -5,6 +5,12 @@ const validate = require('../middleware/validate.middleware');
 const rutasController = require('../controllers/rutas.controller');
 const authMiddleware = require('../middleware/auth.middleware');
 const adminMiddleware = require('../middleware/admin.middleware');
+const validarId = require('../middleware/validarId.middleware');
+const { esUrlHttp } = require('../utils/validarUrls');
+
+const urlHttp = (campo) =>
+  z.string().max(2048, `${campo} es demasiado larga`).url(`${campo} debe ser una URL válida`)
+    .refine(esUrlHttp, `${campo} tiene que empezar con http:// o https://`);
 
 // Misma paleta que src/lib/colores.js (PALETA_EXTENDIDA) en el frontend — colores ya
 // pensados para contrastar bien con texto blanco, evita calcular contraste en runtime.
@@ -14,35 +20,37 @@ const PALETA_COLORES = [
 ];
 
 const paradaSchema = z.object({
-  lugarId: z.number().int(),
+  lugarId: z.number().int().positive(),
   orden: z.number().int().optional(),
   minutosAlSiguiente: z.number().int().nonnegative().nullable().optional(),
   distanciaKm: z.number().nonnegative().nullable().optional(),
 });
 
 const crearRutaSchema = z.object({
-  nombre: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
-  categoria: z.string().min(2, 'La categoría es muy corta'),
-  descripcion: z.string().min(10, 'La descripción debe tener al menos 10 caracteres'),
-  descripcionParaIA: z.string().min(10, 'La descripción para la IA debe tener al menos 10 caracteres'),
-  fotoUrl: z.string().url('fotoUrl debe ser una URL válida').optional(),
+  nombre: z.string().trim().min(3, 'El nombre debe tener al menos 3 caracteres').max(120, 'El nombre es demasiado largo'),
+  categoria: z.string().trim().min(2, 'La categoría es muy corta').max(60, 'La categoría es demasiado larga'),
+  descripcion: z.string().trim().min(10, 'La descripción debe tener al menos 10 caracteres').max(2000, 'La descripción es demasiado larga'),
+  descripcionParaIA: z.string().trim().min(10, 'La descripción para la IA debe tener al menos 10 caracteres').max(2000, 'La descripción para la IA es demasiado larga'),
+  fotoUrl: urlHttp('fotoUrl').optional(),
   emoji: z.string().max(8, 'El emoji es muy largo').optional(),
   color: z.enum(PALETA_COLORES, { message: 'Elegí un color de la paleta disponible' }).optional(),
-  paradas: z.array(paradaSchema).min(1, 'La ruta necesita al menos un lugar'),
+  paradas: z.array(paradaSchema).min(1, 'La ruta necesita al menos un lugar').max(30, 'Máximo 30 paradas'),
 });
 
 const actualizarRutaSchema = z.object({
-  nombre: z.string().min(3, 'El nombre debe tener al menos 3 caracteres').optional(),
-  categoria: z.string().min(2, 'La categoría es muy corta').optional(),
-  descripcion: z.string().min(10, 'La descripción debe tener al menos 10 caracteres').optional(),
-  descripcionParaIA: z.string().min(10, 'La descripción para la IA debe tener al menos 10 caracteres').optional(),
-  fotoUrl: z.string().url('fotoUrl debe ser una URL válida').optional(),
+  nombre: z.string().trim().min(3, 'El nombre debe tener al menos 3 caracteres').max(120, 'El nombre es demasiado largo').optional(),
+  categoria: z.string().trim().min(2, 'La categoría es muy corta').max(60, 'La categoría es demasiado larga').optional(),
+  descripcion: z.string().trim().min(10, 'La descripción debe tener al menos 10 caracteres').max(2000, 'La descripción es demasiado larga').optional(),
+  descripcionParaIA: z.string().trim().min(10, 'La descripción para la IA debe tener al menos 10 caracteres').max(2000, 'La descripción para la IA es demasiado larga').optional(),
+  fotoUrl: urlHttp('fotoUrl').optional(),
   emoji: z.string().max(8, 'El emoji es muy largo').optional(),
   color: z.enum(PALETA_COLORES, { message: 'Elegí un color de la paleta disponible' }).optional(),
-  paradas: z.array(paradaSchema).min(1, 'La ruta necesita al menos un lugar').optional(),
+  paradas: z.array(paradaSchema).min(1, 'La ruta necesita al menos un lugar').max(30, 'Máximo 30 paradas').optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'Debés enviar al menos un campo para actualizar',
 });
+
+router.param('id', validarId);
 
 router.get('/', rutasController.obtenerTodas);
 router.post('/', authMiddleware, adminMiddleware, validate(crearRutaSchema), rutasController.crear);

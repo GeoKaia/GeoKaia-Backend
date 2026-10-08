@@ -9,7 +9,8 @@ module.exports = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Se fija el algoritmo para que nadie pueda presentar un token firmado con otro (por ejemplo 'none').
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
     req.negocio = decoded;
     next();
   } catch (err) {

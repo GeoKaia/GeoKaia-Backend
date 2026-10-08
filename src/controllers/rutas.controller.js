@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const { responderError } = require('../utils/errores');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
 
@@ -18,7 +19,7 @@ exports.obtenerTodas = async (req, res) => {
     });
     res.json(rutas);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener las rutas: ' + error.message });
+    responderError(res, error, 'Error al obtener las rutas');
   }
 };
 
@@ -66,7 +67,7 @@ exports.crear = async (req, res) => {
 
     res.status(201).json({ mensaje: 'Ruta creada exitosamente', ruta: nuevaRuta });
   } catch (error) {
-    res.status(500).json({ error: 'Error al crear la ruta: ' + error.message });
+    responderError(res, error, 'Error al crear la ruta');
   }
 };
 
@@ -109,7 +110,7 @@ exports.actualizar = async (req, res) => {
 
     res.json({ mensaje: 'Ruta actualizada exitosamente', ruta: rutaActualizada });
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar la ruta: ' + error.message });
+    responderError(res, error, 'Error al actualizar la ruta');
   }
 };
 
@@ -123,6 +124,6 @@ exports.eliminar = async (req, res) => {
     });
     res.json({ mensaje: 'Ruta eliminada correctamente' });
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar la ruta: ' + error.message });
+    responderError(res, error, 'Error al eliminar la ruta');
   }
 };

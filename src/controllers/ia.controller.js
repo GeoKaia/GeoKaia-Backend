@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const { responderError } = require('../utils/errores');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const Groq = require('groq-sdk');
@@ -73,8 +74,21 @@ Respondé ÚNICAMENTE con un JSON válido con este formato exacto, sin texto adi
     const jsonLimpio = respuestaTexto.replace(/```json|```/g, '').trim();
     const respuestaJSON = JSON.parse(jsonLimpio);
 
-    res.json(respuestaJSON);
+    // La salida del modelo no es de confianza: se conservan solo las recomendaciones de rutas que existen
+    // y textos de largo razonable, sin importar lo que el modelo (o un prompt malicioso) haya devuelto.
+    const idsValidos = new Set(rutas.map((r) => r.id));
+    const recomendaciones = (Array.isArray(respuestaJSON.recomendaciones) ? respuestaJSON.recomendaciones : [])
+      .filter((r) => idsValidos.has(r?.rutaId))
+      .slice(0, 5)
+      .map((r) => ({
+        rutaId: r.rutaId,
+        nombre: String(r.nombre ?? '').slice(0, 120),
+        razon: String(r.razon ?? '').slice(0, 400),
+      }));
+    const mensaje = String(respuestaJSON.mensaje ?? '').slice(0, 400);
+
+    res.json({ recomendaciones, mensaje });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    responderError(res, err);
   }
 };

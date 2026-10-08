@@ -1,4 +1,5 @@
 const bcrypt = require('bcrypt');
+const { responderError } = require('../utils/errores');
 const { PrismaClient } = require('@prisma/client');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
@@ -19,20 +20,22 @@ exports.obtenerTodos = async (req, res) => {
     });
     res.json(lugares);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener los lugares: ' + error.message });
+    responderError(res, error, 'Error al obtener los lugares');
   }
 };
 
 // 2. Obtener un único lugar por su ID
 exports.obtenerPorId = async (req, res) => {
   try {
-    const lugar = await prisma.lugar.findUnique({
-      where: { 
-        id: parseInt(req.params.id) 
+    // Endpoint público: solo lugares aprobados (antes devolvía también los pendientes y rechazados) y
+    // SIN la relación con el negocio dueño. Con `negocio: true` la respuesta incluía su fila completa:
+    // correo, hash de contraseña y secreto TOTP del 2FA.
+    const lugar = await prisma.lugar.findFirst({
+      where: {
+        id: parseInt(req.params.id),
+        estado: 'APROBADO',
       },
       include: {
-        // Incluimos la relación del negocio y las paradas por si la UI necesita mostrar detalles adicionales
-        negocio: true,
         paradas: {
           include: {
             ruta: true,
@@ -44,7 +47,7 @@ exports.obtenerPorId = async (req, res) => {
     if (!lugar) return res.status(404).json({ error: 'Lugar no encontrado' });
     res.json(lugar);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener el lugar: ' + error.message });
+    responderError(res, error, 'Error al obtener el lugar');
   }
 };
 
@@ -99,7 +102,7 @@ exports.crear = async (req, res) => {
       lugar: nuevoLugar
     });
   } catch (error) {
-    res.status(500).json({ error: 'Error al crear el lugar: ' + error.message });
+    responderError(res, error, 'Error al crear el lugar');
   }
 };
 
@@ -122,7 +125,7 @@ exports.obtenerMiLugar = async (req, res) => {
 
     res.json(negocio.lugar);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener el lugar: ' + error.message });
+    responderError(res, error, 'Error al obtener el lugar');
   }
 };
 
@@ -167,7 +170,7 @@ exports.actualizarMiLugar = async (req, res) => {
       lugar: lugarActualizado
     });
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar el lugar: ' + error.message });
+    responderError(res, error, 'Error al actualizar el lugar');
   }
 };
 
@@ -199,7 +202,7 @@ exports.eliminarMiLugar = async (req, res) => {
 
     res.json({ mensaje: 'Lugar eliminado correctamente' });
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar el lugar: ' + error.message });
+    responderError(res, error, 'Error al eliminar el lugar');
   }
 };
 
@@ -215,7 +218,7 @@ exports.obtenerPendientes = async (req, res) => {
     });
     res.json(lugares);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener los lugares pendientes: ' + error.message });
+    responderError(res, error, 'Error al obtener los lugares pendientes');
   }
 };
 
@@ -234,7 +237,7 @@ exports.actualizarEstado = async (req, res) => {
 
     res.json({ mensaje: `Lugar marcado como ${estado}`, lugar });
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar el estado: ' + error.message });
+    responderError(res, error, 'Error al actualizar el estado');
   }
 };
 
@@ -256,7 +259,7 @@ exports.obtenerTodosAdmin = async (req, res) => {
     });
     res.json(lugares);
   } catch (error) {
-    res.status(500).json({ error: 'Error al obtener los lugares: ' + error.message });
+    responderError(res, error, 'Error al obtener los lugares');
   }
 };
 
@@ -279,7 +282,7 @@ exports.actualizarLugarAdmin = async (req, res) => {
 
     res.json({ mensaje: 'Lugar actualizado exitosamente', lugar: lugarActualizado });
   } catch (error) {
-    res.status(500).json({ error: 'Error al actualizar el lugar: ' + error.message });
+    responderError(res, error, 'Error al actualizar el lugar');
   }
 };
 
@@ -300,6 +303,6 @@ exports.eliminarLugarAdmin = async (req, res) => {
 
     res.json({ mensaje: 'Lugar eliminado correctamente' });
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar el lugar: ' + error.message });
+    responderError(res, error, 'Error al eliminar el lugar');
   }
 };
