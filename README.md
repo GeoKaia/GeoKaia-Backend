@@ -186,7 +186,7 @@ Copiá `.env.example` a `.env` y completá:
 | `JWT_SECRET` | Sí | Secreto usado para firmar y verificar los JWT de sesión |
 | `GROQ_API_KEY` | Sí | API Key de Groq, usada por el agente de recomendación de rutas |
 | `PORT` | No | Puerto del servidor. Default `4000` si no se define |
-| `CORS_ORIGINS` | No | Orígenes del navegador autorizados a llamar a la API, separados por coma. Default: `https://geo-kaia-frontend.vercel.app` (`localhost` siempre se permite para desarrollo) |
+| `CORS_ORIGINS` | No | Orígenes del navegador autorizados a llamar a la API, separados por coma. Se suman a los dominios del frontend (`geokaia.vercel.app` y `geo-kaia-frontend.vercel.app`); `localhost` siempre se permite para desarrollo |
 
 ---
 
