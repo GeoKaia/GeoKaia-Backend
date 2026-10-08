@@ -1,7 +1,9 @@
 const bcrypt = require('bcrypt');
+const { responderError } = require('../utils/errores');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
+const { TERMINOS_VERSION } = require('../config/legal');
 
 // Nuevas importaciones obligatorias para Prisma 7
 const { PrismaClient } = require('@prisma/client');
@@ -12,6 +14,10 @@ const { PrismaPg } = require('@prisma/adapter-pg');
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
+
+// Hash de relleno: si el correo no existe igual se hace una comparación bcrypt, para que responder
+// "usuario inexistente" no sea más rápido que "contraseña incorrecta" y no sirva para descubrir correos.
+const HASH_RELLENO = bcrypt.hashSync('relleno-no-es-una-contrasena', 10);
 
 exports.registrar = async (req, res) => {
   // A propósito solo desestructuramos estos 4 campos: aunque alguien mande "esAdmin" en
@@ -28,6 +34,10 @@ exports.registrar = async (req, res) => {
         nombreContacto,
         whatsapp,
         totpSecret: secret.base32,
+        // La aceptación ya vino validada en true por registrarSchema. La versión y la fecha las
+        // pone el servidor: no se confía en lo que mande el cliente.
+        aceptoTerminosEn: new Date(),
+        terminosVersion: TERMINOS_VERSION,
       },
     });
     const qrUrl = await qrcode.toDataURL(secret.otpauth_url);
@@ -40,7 +50,7 @@ exports.registrar = async (req, res) => {
     if (err.code === 'P2002') {
       return res.status(409).json({ error: 'Ese correo ya está registrado. Iniciá sesión en vez de crear una cuenta nueva.' });
     }
-    res.status(500).json({ error: err.message });
+    responderError(res, err);
   }
 };
 
@@ -48,12 +58,13 @@ exports.login = async (req, res) => {
   const { email, password } = req.body;
   try {
     const negocio = await prisma.negocio.findUnique({ where: { email } });
-    if (!negocio) return res.status(404).json({ error: 'Usuario no encontrado' });
-    const valida = await bcrypt.compare(password, negocio.passwordHash);
-    if (!valida) return res.status(401).json({ error: 'Contraseña incorrecta' });
+    const valida = await bcrypt.compare(password, negocio?.passwordHash ?? HASH_RELLENO);
+    // Un solo mensaje y un solo código para "no existe" y "contraseña incorrecta": responder distinto
+    // permitiría averiguar qué correos tienen cuenta.
+    if (!negocio || !valida) return res.status(401).json({ error: 'Correo o contraseña incorrectos' });
     res.json({ mensaje: 'Contraseña válida. Ingresá tu código 2FA.', negocioId: negocio.id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    responderError(res, err);
   }
 };
 
@@ -85,7 +96,7 @@ exports.eliminarCuenta = async (req, res) => {
 
     res.json({ mensaje: 'Cuenta eliminada correctamente' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    responderError(res, err);
   }
 };
 
@@ -93,7 +104,7 @@ exports.verificar2FA = async (req, res) => {
   const { negocioId, token } = req.body;
   try {
     const negocio = await prisma.negocio.findUnique({ where: { id: negocioId } });
-    if (!negocio) return res.status(404).json({ error: 'Negocio no encontrado' });
+    if (!negocio?.totpSecret) return res.status(401).json({ error: 'Código 2FA incorrecto' });
     const valido = speakeasy.totp.verify({
       secret: negocio.totpSecret,
       encoding: 'base32',
@@ -108,6 +119,6 @@ exports.verificar2FA = async (req, res) => {
     );
     res.json({ token: jwtToken });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    responderError(res, err);
   }
 };

@@ -103,6 +103,11 @@ model Negocio {
   totpSecret     String?
   esAdmin        Boolean  @default(false)
   createdAt      DateTime @default(now())
+  // Constancia de que el titular aceptó los Términos y la Política de Privacidad al registrarse
+  // (Ley 787: consentimiento libre, específico e informado). Quedan en null para las cuentas que
+  // se crearon antes de que existiera esta aceptación.
+  aceptoTerminosEn DateTime?
+  terminosVersion  String?
   lugarId        Int?     @unique
   lugar          Lugar?   @relation(fields: [lugarId], references: [id])
 }

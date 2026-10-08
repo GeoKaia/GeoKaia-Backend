@@ -1,4 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
+const { responderError } = require('../utils/errores');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
 
@@ -16,6 +17,6 @@ exports.crearLead = async (req, res) => {
 
     res.status(201).json({ mensaje: '¡Gracias! Nos pondremos en contacto pronto.', lead: nuevoLead });
   } catch (error) {
-    res.status(500).json({ error: 'Error al enviar el formulario: ' + error.message });
+    responderError(res, error, 'Error al enviar el formulario');
   }
 };
