@@ -22,12 +22,17 @@ app.set('trust proxy', 1);
 // Cabeceras de seguridad estándar (HSTS, nosniff, sin X-Powered-By, etc.).
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
-// CORS: solo el frontend de producción (y localhost para desarrollo) puede llamar a la API desde un
-// navegador. Para agregar otro dominio, definir CORS_ORIGINS (separados por coma) en el hosting.
-const ORIGENES_PERMITIDOS = (process.env.CORS_ORIGINS || 'https://geo-kaia-frontend.vercel.app')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
+// CORS: solo los dominios del frontend (y localhost para desarrollo) pueden llamar a la API desde un
+// navegador. CORS_ORIGINS (separados por coma) SUMA dominios a esta lista, nunca la reemplaza: así
+// definirla por error no puede dejar afuera al frontend de producción.
+const ORIGENES_BASE = ['https://geokaia.vercel.app', 'https://geo-kaia-frontend.vercel.app'];
+const ORIGENES_PERMITIDOS = [
+  ...ORIGENES_BASE,
+  ...(process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter(Boolean),
+];
 const esOrigenLocal = (origen) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origen);
 app.use(
   cors({
