@@ -37,9 +37,23 @@ const esOrigenLocal = (origen) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 app.use(
   cors({
     origin: (origen, cb) => cb(null, !origen || ORIGENES_PERMITIDOS.includes(origen) || esOrigenLocal(origen)),
+    // La sesión viaja en una cookie: sin credentials el navegador no la manda ni la guarda en peticiones cross-origin.
+    credentials: true,
     maxAge: 600,
   })
 );
+
+// CSRF: como la sesión es una cookie, una página ajena podría intentar mandar un POST/PATCH/DELETE en nombre
+// de quien tiene la sesión abierta. SameSite=Lax ya lo frena en los navegadores modernos; esta es la segunda
+// barrera: si la petición que escribe datos trae un Origin, tiene que ser uno permitido.
+app.use((req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const origen = req.headers.origin;
+  if (origen && !(ORIGENES_PERMITIDOS.includes(origen) || esOrigenLocal(origen))) {
+    return res.status(403).json({ error: 'Origen no permitido' });
+  }
+  next();
+});
 
 // Tope de peticiones por IP (DoS a nivel de aplicación) y de tamaño del cuerpo.
 app.use(limiteGeneral);

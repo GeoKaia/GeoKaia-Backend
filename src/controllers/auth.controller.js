@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const { responderError } = require('../utils/errores');
 const jwt = require('jsonwebtoken');
+const { fijarCookie, borrarCookie } = require('../utils/sesion');
 const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
 const { TERMINOS_VERSION } = require('../config/legal');
@@ -94,6 +95,7 @@ exports.eliminarCuenta = async (req, res) => {
       }
     });
 
+    borrarCookie(res);
     res.json({ mensaje: 'Cuenta eliminada correctamente' });
   } catch (err) {
     responderError(res, err);
@@ -117,8 +119,36 @@ exports.verificar2FA = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '8h' }
     );
-    res.json({ token: jwtToken });
+    // El JWT va solo en la cookie httpOnly; el cuerpo no lo incluye para que JavaScript nunca lo tenga.
+    fijarCookie(res, jwtToken);
+    res.json({ mensaje: 'Sesión iniciada', esAdmin: negocio.esAdmin });
   } catch (err) {
     responderError(res, err);
   }
+};
+
+// Quién soy según la cookie. Es lo que usa el frontend para saber si hay sesión y si es admin,
+// porque ya no puede leer el token. Consulta la base: un cambio de esAdmin pega de inmediato.
+exports.me = async (req, res) => {
+  try {
+    const negocio = await prisma.negocio.findUnique({ where: { id: req.negocio.id } });
+    if (!negocio) {
+      borrarCookie(res);
+      return res.status(401).json({ error: 'Sesión inválida' });
+    }
+    res.json({
+      id: negocio.id,
+      email: negocio.email,
+      nombreContacto: negocio.nombreContacto,
+      esAdmin: negocio.esAdmin,
+      tieneLugar: !!negocio.lugarId,
+    });
+  } catch (err) {
+    responderError(res, err);
+  }
+};
+
+exports.logout = (req, res) => {
+  borrarCookie(res);
+  res.json({ mensaje: 'Sesión cerrada' });
 };
