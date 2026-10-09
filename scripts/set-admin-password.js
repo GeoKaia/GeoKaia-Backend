@@ -21,9 +21,8 @@ rl.question(`Nueva contraseña para ${EMAIL_ADMIN}: `, async (password) => {
 
   const errores = validarPassword(password, EMAIL_ADMIN);
   if (errores.length > 0) {
-    console.log('La contraseña no cumple la política (no se cambió nada):
- - ' + errores.join('
- - '));
+    console.log('La contraseña no cumple la política (no se cambió nada):');
+    errores.forEach((e) => console.log(' - ' + e));
     await pool.end();
     return;
   }
