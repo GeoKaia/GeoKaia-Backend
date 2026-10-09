@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client');
 const { responderError } = require('../utils/errores');
+const auditoria = require('../services/auditoria');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
 
@@ -65,6 +66,7 @@ exports.crear = async (req, res) => {
       });
     });
 
+    await auditoria.registrar({ req, accion: 'ruta.crear', recurso: { tipo: 'Ruta', id: nuevaRuta.id } });
     res.status(201).json({ mensaje: 'Ruta creada exitosamente', ruta: nuevaRuta });
   } catch (error) {
     responderError(res, error, 'Error al crear la ruta');
@@ -108,6 +110,7 @@ exports.actualizar = async (req, res) => {
       });
     });
 
+    await auditoria.registrar({ req, accion: 'ruta.editar', recurso: { tipo: 'Ruta', id: rutaActualizada.id } });
     res.json({ mensaje: 'Ruta actualizada exitosamente', ruta: rutaActualizada });
   } catch (error) {
     responderError(res, error, 'Error al actualizar la ruta');
@@ -122,6 +125,7 @@ exports.eliminar = async (req, res) => {
       await tx.paradaRuta.deleteMany({ where: { rutaId } });
       await tx.ruta.delete({ where: { id: rutaId } });
     });
+    await auditoria.registrar({ req, accion: 'ruta.eliminar', recurso: { tipo: 'Ruta', id: req.params.id } });
     res.json({ mensaje: 'Ruta eliminada correctamente' });
   } catch (error) {
     responderError(res, error, 'Error al eliminar la ruta');

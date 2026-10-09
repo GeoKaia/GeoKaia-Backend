@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const { responderError } = require('../utils/errores');
+const auditoria = require('../services/auditoria');
 const { PrismaClient } = require('@prisma/client');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
@@ -97,6 +98,7 @@ exports.crear = async (req, res) => {
       }
     });
 
+    await auditoria.registrar({ req, accion: 'lugar.crear', recurso: { tipo: 'Lugar', id: nuevoLugar.id }, negocioAfectadoId: negocioId, detalle: { tier: tierElegido } });
     res.status(201).json({
       mensaje: 'Lugar creado. Va a aparecer en el mapa cuando el equipo de GeoKaia lo apruebe.',
       lugar: nuevoLugar
@@ -165,6 +167,7 @@ exports.actualizarMiLugar = async (req, res) => {
       data: { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, mapsUrl, wazeUrl, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl },
     });
 
+    await auditoria.registrar({ req, accion: 'lugar.editar', recurso: { tipo: 'Lugar', id: negocio.lugarId }, negocioAfectadoId: negocioId, detalle: { campos: Object.keys(req.body || {}) } });
     res.json({
       mensaje: 'Contenido del lugar actualizado exitosamente',
       lugar: lugarActualizado
@@ -200,6 +203,8 @@ exports.eliminarMiLugar = async (req, res) => {
       await tx.lugar.delete({ where: { id: lugarId } });
     });
 
+    await auditoria.registrar({ req, accion: 'lugar.eliminar', recurso: { tipo: 'Lugar', id: lugarId }, negocioAfectadoId: negocioId });
+    await auditoria.registrar({ req, accion: 'lugar.eliminar_admin', recurso: { tipo: 'Lugar', id: lugarId }, negocioAfectadoId: duenoId });
     res.json({ mensaje: 'Lugar eliminado correctamente' });
   } catch (error) {
     responderError(res, error, 'Error al eliminar el lugar');
@@ -235,6 +240,7 @@ exports.actualizarEstado = async (req, res) => {
       data: { estado },
     });
 
+    await auditoria.registrar({ req, accion: 'lugar.estado', recurso: { tipo: 'Lugar', id: lugar.id }, lugarId: lugar.id, detalle: { estado } });
     res.json({ mensaje: `Lugar marcado como ${estado}`, lugar });
   } catch (error) {
     responderError(res, error, 'Error al actualizar el estado');
@@ -280,6 +286,7 @@ exports.actualizarLugarAdmin = async (req, res) => {
       data: { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, mapsUrl, wazeUrl, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl, estado },
     });
 
+    await auditoria.registrar({ req, accion: 'lugar.editar_admin', recurso: { tipo: 'Lugar', id: lugarId }, lugarId, detalle: { campos: Object.keys(req.body || {}) } });
     res.json({ mensaje: 'Lugar actualizado exitosamente', lugar: lugarActualizado });
   } catch (error) {
     responderError(res, error, 'Error al actualizar el lugar');
@@ -297,6 +304,7 @@ exports.eliminarLugarAdmin = async (req, res) => {
     // (este entorno bloquea transacciones con varios deletes seguidos por Bash; en el
     // servidor corriendo normalmente no hay ese problema, pero mantenemos el mismo
     // orden de pasos por consistencia y para que sea facil de auditar).
+    const duenoId = (await prisma.negocio.findUnique({ where: { lugarId }, select: { id: true } }))?.id ?? null;
     await prisma.paradaRuta.deleteMany({ where: { lugarId } });
     await prisma.negocio.updateMany({ where: { lugarId }, data: { lugarId: null } });
     await prisma.lugar.delete({ where: { id: lugarId } });
@@ -321,6 +329,7 @@ exports.crearComentarioAdmin = async (req, res) => {
     const comentario = await prisma.comentarioAdmin.create({
       data: { lugarId, autorEmail: req.negocio.email, texto: req.body.texto.trim() },
     });
+    await auditoria.registrar({ req, accion: 'comentario.crear', recurso: { tipo: 'Lugar', id: lugarId }, lugarId });
     res.status(201).json({ mensaje: 'Comentario guardado', comentario });
   } catch (error) {
     responderError(res, error, 'Error al guardar el comentario');

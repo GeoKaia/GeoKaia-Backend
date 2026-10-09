@@ -9,6 +9,7 @@ const lugaresRoutes = require('./routes/lugares.routes');
 const authRoutes = require('./routes/auth.routes');
 const rutasRoutes = require('./routes/rutas.routes');
 const leadsRoutes = require('./routes/leads.routes');
+const adminRoutes = require('./routes/admin.routes');
 const { limiteGeneral } = require('./middleware/limites.middleware');
 
 const app = express();
@@ -72,6 +73,7 @@ app.use('/api/lugares', lugaresRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/rutas', rutasRoutes);
 app.use('/api/leads', leadsRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 4. Errores. Sin esto, una ruta inexistente o un JSON mal formado devolvían la página de error por
 // defecto de Express, que en desarrollo incluye la traza (rutas de archivos y versiones).
