@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "test": "node --test --test-concurrency=1 --test-timeout=120000 \"tests/**/*.test.js\""
+    "test": "node --test --test-concurrency=1 --test-timeout=120000 \"tests/**/*.test.js\"",
+    "staging:local": "node scripts/staging-local.js"
   },
   "keywords": [],
   "author": "",
