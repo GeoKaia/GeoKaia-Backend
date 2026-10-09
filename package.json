@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test --test-concurrency=1 --test-timeout=120000 \"tests/**/*.test.js\""
   },
   "keywords": [],
   "author": "",
@@ -32,6 +32,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/qrcode": "^1.5.6",
     "@types/speakeasy": "^2.0.10",
+    "embedded-postgres": "^18.4.0-beta.17",
     "nodemon": "^3.1.14",
     "prisma": "^7.8.0"
   }
