@@ -210,6 +210,7 @@ src/
 │   └── validarId.middleware.js  # Rechaza con 400 cualquier :id que no sea un entero positivo
 ├── utils/
 │   ├── validarUrls.js           # Verifica que cada link sea http(s) y lo que dice ser (foto, Maps, Waze)
+│   ├── password.js              # Política de contraseñas nuevas (12+ caracteres, mayúscula, minúscula, número, símbolo)
 │   └── errores.js               # Respuesta 500 genérica; el detalle queda solo en el log
 prisma/
 ├── schema.prisma                # Modelo de datos (Negocio, Lugar, Ruta, ParadaRuta, Lead)
@@ -316,6 +317,7 @@ La API se protege en capas. Cada una corresponde a un tipo de ataque habitual:
 | **Acceso no autorizado** | `authMiddleware` exige un JWT válido (algoritmo HS256 fijado); `adminMiddleware` re-consulta en la base que la cuenta tenga `esAdmin: true` (no confía en el contenido del token). El registro público no puede crear administradores. |
 | **Orígenes no autorizados** | CORS con lista de orígenes (`CORS_ORIGINS`); `helmet` agrega HSTS, `nosniff` y demás cabeceras de seguridad. |
 | **Robo de credenciales** | Contraseñas con `bcrypt`; autenticación en dos factores TOTP (`speakeasy`) obligatoria; el JWT vence a las 8 horas y viaja en una cookie `httpOnly` + `Secure` + `SameSite=Lax` (JavaScript no puede leerla), con CORS `credentials` y verificación de `Origin` en peticiones que escriben datos. |
+| **Robo de credenciales** | Contraseñas nuevas de 12 a 72 caracteres con mayúscula, minúscula, número y símbolo, sin espacios, sin claves comunes ni el correo (`utils/password.js`; el login no la exige para no dejar afuera a cuentas anteriores), guardadas con `bcrypt` (costo 12); autenticación en dos factores TOTP (`speakeasy`) obligatoria; el JWT vence a las 8 horas. |
 | **Manipulación de la IA** | La consulta del turista tiene tope de 500 caracteres y la respuesta del modelo se filtra: solo se devuelven rutas que existen en el catálogo, con textos de largo acotado. |
 
 **Limitaciones conocidas:** el paso de 2FA recibe el `negocioId` que devuelve el login, no un token temporal firmado (el límite por cuenta mitiga el abuso, pero un token de "paso 1" sería lo ideal); los límites de peticiones son por instancia; y no hay una suite de pruebas automatizadas, por lo que las defensas se verificaron manualmente con peticiones de ataque contra la API.
