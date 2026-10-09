@@ -188,6 +188,8 @@ Copiá `.env.example` a `.env` y completá:
 | `PORT` | No | Puerto del servidor. Default `4000` si no se define |
 | `CORS_ORIGINS` | No | Orígenes del navegador autorizados a llamar a la API, separados por coma. Se suman a los dominios del frontend (`geokaia.vercel.app` y `geo-kaia-frontend.vercel.app`); `localhost` siempre se permite para desarrollo |
 | `ADMIN_EDICION_LUGARES` | No | `true` reactiva la edición de lugares ajenos por parte del admin (`PATCH /api/lugares/admin/:id`). Default apagado |
+| `COOKIE_SECURE` | No | Fuerza (`true`) o quita (`false`) el atributo `Secure` de la cookie de sesión. Por defecto es `Secure` cuando `NODE_ENV=production` |
+| `TRUST_PROXY_HOPS` | No | Cantidad de proxies delante del backend (default `1`). Con el frontend reenviando `/api` por rewrites (Vercel) o con Nginx delante, poné `2` para que los límites de peticiones cuenten por visitante |
 
 ---
 
@@ -212,6 +214,7 @@ src/
 ├── utils/
 │   ├── validarUrls.js           # Verifica que cada link sea http(s) y lo que dice ser (foto, Maps, Waze)
 │   ├── password.js              # Política de contraseñas nuevas (12+ caracteres, mayúscula, minúscula, número, símbolo)
+│   ├── sesion.js                # Cookie de sesión httpOnly (fijar, borrar y leer el JWT)
 │   └── errores.js               # Respuesta 500 genérica; el detalle queda solo en el log
 prisma/
 ├── schema.prisma                # Modelo de datos (Negocio, Lugar, Ruta, ParadaRuta, Lead)
