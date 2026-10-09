@@ -187,6 +187,7 @@ Copiá `.env.example` a `.env` y completá:
 | `GROQ_API_KEY` | Sí | API Key de Groq, usada por el agente de recomendación de rutas |
 | `PORT` | No | Puerto del servidor. Default `4000` si no se define |
 | `CORS_ORIGINS` | No | Orígenes del navegador autorizados a llamar a la API, separados por coma. Se suman a los dominios del frontend (`geokaia.vercel.app` y `geo-kaia-frontend.vercel.app`); `localhost` siempre se permite para desarrollo |
+| `ADMIN_EDICION_LUGARES` | No | `true` reactiva la edición de lugares ajenos por parte del admin (`PATCH /api/lugares/admin/:id`). Default apagado |
 
 ---
 
@@ -244,11 +245,18 @@ Base URL: `https://geokaia-backend.onrender.com` (o `http://localhost:4000` en l
 | GET | `/` | 🔓 | Lista los lugares con `estado: APROBADO` (lo que se ve en el mapa público) |
 | GET | `/:id` | 🔓 | Un lugar aprobado, con las rutas donde aparece (no expone datos del negocio dueño) |
 | GET | `/mi-lugar` | 🔒 | El lugar del negocio autenticado (para precargar su panel) |
+| GET | `/mi-lugar/comentarios` | 🔒 | Comentarios del equipo en el lugar propio (solo lectura, sin el correo del admin) |
 | POST | `/` | 🔒 | Crea el lugar del negocio (tier Gratis/Premium), queda `PENDIENTE` |
 | PATCH | `/mi-lugar` | 🔒 | Edita el contenido del lugar propio (campos premium se ignoran si el tier es Gratis) |
 | DELETE | `/mi-lugar` | 🔒 | Borra el lugar (mantiene la cuenta), pide la contraseña |
 | GET | `/admin/pendientes` | 👑 | Lista lugares en cola de aprobación |
 | PATCH | `/admin/:id/estado` | 👑 | Aprueba o rechaza un lugar |
+| GET | `/admin/todos` | 👑 | Lista todos los lugares, de cualquier estado |
+| PATCH | `/admin/:id` | 👑 | Edita cualquier lugar. **Desactivado por defecto** (responde 403): el equipo deja comentarios y cada negocio corrige lo suyo. Se reactiva con `ADMIN_EDICION_LUGARES=true` |
+| DELETE | `/admin/:id` | 👑 | Borra cualquier lugar (y sus comentarios) |
+| GET | `/admin/:id/comentarios` | 👑 | Lista los comentarios que el equipo dejó en un lugar |
+| POST | `/admin/:id/comentarios` | 👑 | Deja un comentario para el negocio (3 a 1000 caracteres); queda con el correo del admin |
+| DELETE | `/admin/comentarios/:comentarioId` | 👑 | Borra un comentario |
 
 ### Rutas — `/api/rutas`
 
