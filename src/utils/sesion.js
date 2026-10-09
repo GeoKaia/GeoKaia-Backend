@@ -1,48 +1,29 @@
-// Sesión por cookies httpOnly: el JWT ya no viaja por JavaScript (ni localStorage ni sessionStorage), así que un
-// script inyectado (XSS) o alguien mirando F12 > Application no puede leerlo ni copiarlo.
-//  - httpOnly: JavaScript no la ve.
-//  - secure: solo por HTTPS (en producción).
-//  - sameSite 'lax': el navegador no la manda en peticiones POST/PATCH/DELETE iniciadas desde otro sitio (CSRF).
-//
-// Son DOS cookies, para que quitar una sola desde F12 no cierre la sesión:
-//  - gk_sesion      (8 h)      JWT de acceso. Es la que se usa en cada petición.
-//  - gk_dispositivo (7 días)   token opaco de "este dispositivo" (ver utils/refresco.js). Si falta gk_sesion pero
-//                              esta es válida, el servidor emite una gk_sesion nueva sin pedir login otra vez.
-// Si se borran LAS DOS, la sesión se cierra: es lo correcto, porque ya no queda nada que identifique al usuario.
-const COOKIE = 'gk_sesion';
-const COOKIE_REFRESCO = 'gk_dispositivo';
-const DURACION_MS = 8 * 60 * 60 * 1000;
-const DIAS_REFRESCO = Number(process.env.SESION_DIAS) > 0 ? Number(process.env.SESION_DIAS) : 7;
+// Cookie de sesión. La sesión vive en el SERVIDOR (tabla "Sesion", ver services/sesiones.js); la cookie solo lleva un
+// identificador aleatorio de 256 bits, sin datos del usuario ni permisos: nada que se pueda editar o inventar en F12.
+//  - HttpOnly  : JavaScript no la lee (protege frente a XSS).
+//  - Secure    : solo por HTTPS (producción). Con Secure se usa el prefijo __Host-, que además obliga a Path=/ y sin
+//                Domain: ningún subdominio puede pisarla.
+//  - SameSite  : Lax. Strict rompería los enlaces que llegan desde fuera (por ejemplo desde un correo) y Lax ya
+//                bloquea el envío en POST/PATCH/DELETE iniciados por otro sitio; el servidor verifica además el
+//                Origin de cada escritura (ver index.js).
+//  - Path=/ y sin Domain: la cookie es del host exacto que la fijó.
+//  - Max-Age   : igual a la duración máxima de la sesión. Las cuentas de administrador usan cookie de sesión del
+//                navegador (sin Max-Age): se borra al cerrar el navegador.
+const esSegura = () => (process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : process.env.NODE_ENV === 'production');
 
-const opciones = () => ({
-  httpOnly: true,
-  secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
-  path: '/',
-});
+const nombreCookie = () => (esSegura() ? '__Host-gk_sesion' : 'gk_sesion');
 
-// La cookie de dispositivo solo viaja a /api (no a las páginas): menos exposición.
-const opcionesRefresco = () => ({ ...opciones(), path: '/api' });
+const opciones = () => ({ httpOnly: true, secure: esSegura(), sameSite: 'lax', path: '/' });
 
-exports.COOKIE = COOKIE;
-exports.COOKIE_REFRESCO = COOKIE_REFRESCO;
-exports.DIAS_REFRESCO = DIAS_REFRESCO;
+exports.nombreCookie = nombreCookie;
 
-exports.fijarCookie = (res, token) => res.cookie(COOKIE, token, { ...opciones(), maxAge: DURACION_MS });
+exports.fijarCookie = (res, token, { maxAgeMs } = {}) =>
+  res.cookie(nombreCookie(), token, maxAgeMs ? { ...opciones(), maxAge: maxAgeMs } : opciones());
 
-exports.fijarCookieRefresco = (res, token) =>
-  res.cookie(COOKIE_REFRESCO, token, { ...opcionesRefresco(), maxAge: DIAS_REFRESCO * 24 * 60 * 60 * 1000 });
-
-exports.borrarCookieRefresco = (res) => res.clearCookie(COOKIE_REFRESCO, opcionesRefresco());
-
-// Cierra la sesión del lado del navegador: borra las dos cookies.
-exports.borrarCookie = (res) => {
-  res.clearCookie(COOKIE, opciones());
-  res.clearCookie(COOKIE_REFRESCO, opcionesRefresco());
-};
+exports.borrarCookie = (res) => res.clearCookie(nombreCookie(), opciones());
 
 // Lee una cookie a mano para no sumar una dependencia solo por esto.
-function leerCookie(req, nombre) {
+exports.leerCookie = (req, nombre = nombreCookie()) => {
   const crudo = req.headers.cookie;
   if (!crudo) return null;
   for (const par of crudo.split(';')) {
@@ -57,7 +38,4 @@ function leerCookie(req, nombre) {
     }
   }
   return null;
-}
-
-exports.leerToken = (req) => leerCookie(req, COOKIE);
-exports.leerTokenRefresco = (req) => leerCookie(req, COOKIE_REFRESCO);
+};

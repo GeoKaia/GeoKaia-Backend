@@ -190,7 +190,8 @@ Copiá `.env.example` a `.env` y completá:
 | `ADMIN_EDICION_LUGARES` | No | `true` reactiva la edición de lugares ajenos por parte del admin (`PATCH /api/lugares/admin/:id`). Default apagado |
 | `COOKIE_SECURE` | No | Fuerza (`true`) o quita (`false`) el atributo `Secure` de la cookie de sesión. Por defecto es `Secure` cuando `NODE_ENV=production` |
 | `TRUST_PROXY_HOPS` | No | Cantidad de proxies delante del backend (default `1`). Con el frontend reenviando `/api` por rewrites (Vercel) o con Nginx delante, poné `2` para que los límites de peticiones cuenten por visitante |
-| `SESION_DIAS` | No | Días que dura la cookie de dispositivo `gk_dispositivo` (default `7`). Mientras esté vigente, borrar solo `gk_sesion` desde F12 no cierra la sesión: se renueva sola |
+| `SESION_MAX_HORAS` | No | Duración máxima absoluta de una sesión, en horas (default `8`) |
+| `SESION_INACTIVIDAD_MIN` | No | Minutos de inactividad tras los que la sesión vence (default `30`) |
 
 ---
 
@@ -207,16 +208,15 @@ src/
 │   └── leads.controller.js      # Formulario de contacto de negocios interesados
 ├── routes/                      # Definición de endpoints + validación (Zod) por recurso
 ├── middleware/
-│   ├── auth.middleware.js       # Verifica el JWT y adjunta req.negocio
-│   ├── admin.middleware.js      # Verifica esAdmin en la base (no confía en el JWT)
+│   ├── auth.middleware.js       # Valida la sesión contra la base (tabla Sesion) y carga identidad y rol desde la base
+│   ├── admin.middleware.js      # Exige esAdmin (cargado de la base en la misma petición) y audita los accesos denegados
 │   ├── validate.middleware.js   # Valida req.body contra un schema de Zod y entrega solo lo validado
 │   ├── limites.middleware.js    # Rate limiting: general, login, 2FA, registro, leads, chat de IA
 │   └── validarId.middleware.js  # Rechaza con 400 cualquier :id que no sea un entero positivo
 ├── utils/
 │   ├── validarUrls.js           # Verifica que cada link sea http(s) y lo que dice ser (foto, Maps, Waze)
 │   ├── password.js              # Política de contraseñas nuevas (12+ caracteres, mayúscula, minúscula, número, símbolo)
-│   ├── sesion.js                # Cookie de sesión httpOnly (fijar, borrar y leer el JWT)
-│   ├── refresco.js              # Cookie de dispositivo: emitir, renovar la sesión y revocar (guarda solo el hash del token)
+│   ├── sesion.js                # Cookie de sesión httpOnly (nombre, atributos, fijar, borrar, leer)
 │   └── errores.js               # Respuesta 500 genérica; el detalle queda solo en el log
 prisma/
 ├── schema.prisma                # Modelo de datos (Negocio, Lugar, Ruta, ParadaRuta, Lead)
@@ -237,10 +237,13 @@ Base URL: `https://geokaia-backend.onrender.com` (o `http://localhost:4000` en l
 | Método | Ruta | Acceso | Descripción |
 |---|---|---|---|
 | POST | `/registrar` | 🔓 | Crea la cuenta del negocio, genera el secret TOTP y devuelve el QR |
-| POST | `/login` | 🔓 | Valida email + contraseña, no entrega el JWT todavía |
-| POST | `/verificar-2fa` | 🔓 | Valida el código TOTP de 6 dígitos y recién ahí abre la sesión: el JWT (8h) va en la cookie `gk_sesion` httpOnly y se registra el dispositivo en la cookie `gk_dispositivo` (7 días); ninguno va en el cuerpo |
-| GET | `/me` | 🔒 | Quién es el usuario de la sesión (`esAdmin`, `tieneLugar`); lo usa el frontend porque ya no puede leer el token |
-| POST | `/logout` | 🔓 | Revoca el dispositivo en el servidor y borra las dos cookies |
+| POST | `/login` | 🔓 | Valida email + contraseña. NO abre sesión: devuelve un `pasoToken` firmado de 5 minutos para el paso 2. Se bloquea la cuenta tras 10 fallos en 15 minutos |
+| POST | `/verificar-2fa` | 🔓 | Recibe `pasoToken` + código TOTP de 6 dígitos y recién ahí crea la sesión en el servidor: cookie `gk_sesion` (`__Host-gk_sesion` en producción), httpOnly, con identificador nuevo. Bloqueo tras 8 códigos incorrectos |
+| GET | `/me` | 🔒 | Quién es el usuario de la sesión (`esAdmin`, `tieneLugar`) y cuándo vence; el rol sale de la base en cada llamada |
+| POST | `/logout` | 🔓 | Revoca la sesión en el servidor y borra la cookie |
+| POST | `/logout-todas` | 🔒 | Revoca todas las sesiones de la cuenta |
+| GET | `/sesiones` | 🔒 | Lista las sesiones activas propias (sin hashes) |
+| DELETE | `/sesiones/:id` | 🔒 | Cierra una sesión propia (con el id de otra cuenta responde 404) |
 | DELETE | `/cuenta` | 🔒 | Borra la cuenta y su lugar (pide la contraseña de nuevo) |
 
 ### Lugares — `/api/lugares`
@@ -329,7 +332,7 @@ La API se protege en capas. Cada una corresponde a un tipo de ataque habitual:
 | **Fuga de información** | Los errores 500 devuelven un mensaje genérico (el detalle queda en el log). `GET /api/lugares/:id` ya no incluye al negocio dueño y solo devuelve lugares aprobados. Rutas inexistentes y JSON inválido responden 404/400 sin trazas. |
 | **Acceso no autorizado** | `authMiddleware` exige un JWT válido (algoritmo HS256 fijado); `adminMiddleware` re-consulta en la base que la cuenta tenga `esAdmin: true` (no confía en el contenido del token). El registro público no puede crear administradores. |
 | **Orígenes no autorizados** | CORS con lista de orígenes (`CORS_ORIGINS`); `helmet` agrega HSTS, `nosniff` y demás cabeceras de seguridad. |
-| **Robo de credenciales** | Contraseñas nuevas de 12 a 72 caracteres con mayúscula, minúscula, número y símbolo, sin espacios, sin claves comunes ni el correo (`utils/password.js`; el login no la exige para no dejar afuera a cuentas anteriores), guardadas con `bcrypt` (costo 12); autenticación en dos factores TOTP (`speakeasy`) obligatoria; el JWT vence a las 8 horas y viaja en una cookie `httpOnly` (más una cookie de dispositivo `httpOnly` de 7 días con la que se renueva sola; cerrar sesión la revoca en el servidor) + `Secure` + `SameSite=Lax` (JavaScript no puede leerla), con CORS `credentials` y verificación de `Origin` en peticiones que escriben datos. |
+| **Robo de credenciales** | Contraseñas nuevas de 12 a 72 caracteres con mayúscula, minúscula, número y símbolo, sin espacios, sin claves comunes ni el correo (`utils/password.js`; el login no la exige para no dejar afuera a cuentas anteriores), guardadas con `bcrypt` (costo 12); autenticación en dos factores TOTP (`speakeasy`) obligatoria; las sesiones viven en el servidor (tabla `Sesion`): cookie opaca `httpOnly` + `SameSite=Lax` (+ `Secure` y prefijo `__Host-` en producción), duración máxima de 8 h, vencimiento por 30 min de inactividad, identificador nuevo en cada login, revocación al cerrar sesión o ante un incidente; bloqueo temporal de la cuenta tras intentos fallidos; CORS con `credentials` y verificación de `Origin` (obligatorio si la petición lleva la cookie) contra CSRF. |
 | **Manipulación de la IA** | La consulta del turista tiene tope de 500 caracteres y la respuesta del modelo se filtra: solo se devuelven rutas que existen en el catálogo, con textos de largo acotado. |
 
 **Limitaciones conocidas:** el paso de 2FA recibe el `negocioId` que devuelve el login, no un token temporal firmado (el límite por cuenta mitiga el abuso, pero un token de "paso 1" sería lo ideal); los límites de peticiones son por instancia; y no hay una suite de pruebas automatizadas, por lo que las defensas se verificaron manualmente con peticiones de ataque contra la API.

@@ -91,10 +91,13 @@ async function iniciarEntorno({ env: envExtra = {} } = {}) {
 // y las manda de vuelta. `cookies` es editable para simular que alguien las borra o las cambia desde F12.
 function crearCliente(base, { origen = 'http://localhost:3000' } = {}) {
   const cookies = {};
+  // Cada cliente simula estar en su propia IP (el servidor confía en un salto de X-Forwarded-For), para que los límites
+  // por IP no mezclen a clientes de pruebas distintas. Se puede pisar por petición con headers.
+  const ipSimulada = `10.${1 + Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.${1 + Math.floor(Math.random() * 250)}`;
   async function pedir(metodo, ruta, cuerpo, { headers = {}, sinOrigen = false } = {}) {
-    const cabeceras = { ...headers };
+    const cabeceras = { 'x-forwarded-for': ipSimulada, ...headers };
     if (cuerpo !== undefined) cabeceras['content-type'] = 'application/json';
-    if (!sinOrigen && metodo !== 'GET') cabeceras.origin = origen;
+    if (!sinOrigen && metodo !== 'GET' && !cabeceras.origin) cabeceras.origin = origen;
     const cookie = Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');
     if (cookie) cabeceras.cookie = cookie;
     const res = await fetch(base + ruta, { method: metodo, headers: cabeceras, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });

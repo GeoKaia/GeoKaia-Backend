@@ -1,4 +1,5 @@
 const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
 
 // Límites de peticiones por IP (y, en el 2FA, por cuenta). Frenan la fuerza bruta contra el login y el
 // código 2FA, el abuso del chat de Kaia (cada consulta cuesta una llamada a Groq) y la inundación de
@@ -31,7 +32,8 @@ exports.limite2FAPorIp = crear(15, 30, 'Demasiados intentos de verificación. Es
 });
 exports.limite2FAPorCuenta = crear(15, 8, 'Demasiados intentos con este código. Esperá 15 minutos e intentá de nuevo.', {
   skipSuccessfulRequests: true,
-  keyGenerator: (req) => `cuenta:${req.body?.negocioId}`,
+  // La cuenta se saca del pasoToken (sin verificarlo: solo para contar; la verificación real la hace el controlador).
+  keyGenerator: (req) => `cuenta:${jwt.decode(req.body?.pasoToken)?.sub ?? 'sin-paso'}`,
   validate: { keyGeneratorIpFallback: false },
 });
 

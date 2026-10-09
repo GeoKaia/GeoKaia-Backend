@@ -48,14 +48,19 @@ app.use(
 );
 
 // CSRF: como la sesión es una cookie, una página ajena podría intentar mandar un POST/PATCH/DELETE en nombre
-// de quien tiene la sesión abierta. SameSite=Lax ya lo frena en los navegadores modernos; esta es la segunda
-// barrera: si la petición que escribe datos trae un Origin, tiene que ser uno permitido.
+// de quien tiene la sesión abierta. Defensas: (1) SameSite=Lax en la cookie; (2) esta verificación de Origin en toda
+// petición que escribe datos: si trae un Origin tiene que ser uno permitido, y si la petición lleva la cookie de
+// sesión el Origin es OBLIGATORIO (los navegadores lo mandan siempre en POST/PATCH/DELETE; quien no lo manda no es
+// un navegador de esta aplicación); (3) la API solo acepta JSON, que un formulario de otro sitio no puede enviar
+// sin pasar por CORS.
+const { nombreCookie } = require('./utils/sesion');
 app.use((req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   const origen = req.headers.origin;
-  if (origen && !(ORIGENES_PERMITIDOS.includes(origen) || esOrigenLocal(origen))) {
-    return res.status(403).json({ error: 'Origen no permitido' });
-  }
+  const permitido = origen && (ORIGENES_PERMITIDOS.includes(origen) || esOrigenLocal(origen));
+  if (origen && !permitido) return res.status(403).json({ error: 'Origen no permitido' });
+  const llevaSesion = (req.headers.cookie || '').split(';').some((c) => c.trim().startsWith(nombreCookie() + '='));
+  if (llevaSesion && !permitido) return res.status(403).json({ error: 'Origen no permitido' });
   next();
 });
 
