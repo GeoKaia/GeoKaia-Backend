@@ -4,6 +4,7 @@ const { z } = require('zod');
 const validate = require('../middleware/validate.middleware');
 const authController = require('../controllers/auth.controller');
 const authMiddleware = require('../middleware/auth.middleware');
+const { passwordSchema: passwordNuevaSchema, contieneCorreo } = require('../utils/password');
 const { limiteLogin, limite2FAPorIp, limite2FAPorCuenta, limiteRegistro } = require('../middleware/limites.middleware');
 
 // bcrypt solo usa los primeros 72 bytes de la contraseña: el tope evita además que alguien mande
@@ -30,10 +31,15 @@ const verificar2FASchema = z.object({
 // Los demás campos del body (por ejemplo "esAdmin") quedan fuera: el controlador solo lee los de abajo.
 const registrarSchema = z.object({
   email: z.string().email('El correo no es válido').max(254, 'El correo es demasiado largo'),
-  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres').max(72, 'La contraseña es demasiado larga'),
+  // Política de contraseñas nuevas (ver utils/password.js). El login no la aplica: las cuentas anteriores siguen entrando.
+  password: passwordNuevaSchema,
   nombreContacto: z.string().trim().min(3, 'El nombre de contacto debe tener al menos 3 caracteres').max(100, 'El nombre de contacto es demasiado largo'),
   whatsapp: z.string().trim().min(8, 'El número de WhatsApp es muy corto').max(25, 'El número de WhatsApp es demasiado largo'),
   aceptaTerminos: z.literal(true, { message: 'Tenés que aceptar los Términos y la Política de Privacidad para crear tu cuenta' }),
+}).superRefine((datos, ctx) => {
+  if (contieneCorreo(datos.password, datos.email)) {
+    ctx.addIssue({ code: 'custom', path: ['password'], message: 'La contraseña no puede contener tu correo' });
+  }
 });
 
 router.post('/registrar', limiteRegistro, validate(registrarSchema), authController.registrar);

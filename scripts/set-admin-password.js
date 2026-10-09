@@ -3,6 +3,7 @@
 require('dotenv').config();
 const readline = require('readline');
 const bcrypt = require('bcrypt');
+const { validarPassword } = require('../src/utils/password');
 const { PrismaClient } = require('@prisma/client');
 const { Pool } = require('pg');
 const { PrismaPg } = require('@prisma/adapter-pg');
@@ -18,14 +19,17 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 rl.question(`Nueva contraseña para ${EMAIL_ADMIN}: `, async (password) => {
   rl.close();
 
-  if (!password || password.length < 6) {
-    console.log('La contraseña debe tener al menos 6 caracteres. No se cambió nada.');
+  const errores = validarPassword(password, EMAIL_ADMIN);
+  if (errores.length > 0) {
+    console.log('La contraseña no cumple la política (no se cambió nada):
+ - ' + errores.join('
+ - '));
     await pool.end();
     return;
   }
 
   try {
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12);
     const negocio = await prisma.negocio.update({
       where: { email: EMAIL_ADMIN },
       data: { passwordHash, esAdmin: true },

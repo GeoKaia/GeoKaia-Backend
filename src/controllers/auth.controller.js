@@ -25,7 +25,7 @@ exports.registrar = async (req, res) => {
   // a mano en la base — el registro público jamás puede crear otra.
   const { email, password, nombreContacto, whatsapp } = req.body;
   try {
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12);
     const secret = speakeasy.generateSecret({ name: `GeoKaia (${email})` });
     const negocio = await prisma.negocio.create({
       data: {
