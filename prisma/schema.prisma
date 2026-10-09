@@ -110,4 +110,19 @@ model Negocio {
   terminosVersion  String?
   lugarId        Int?     @unique
   lugar          Lugar?   @relation(fields: [lugarId], references: [id])
+  sesiones       SesionRefresco[]
+}
+
+// "Dispositivo" de una sesión iniciada con 2FA. La cookie gk_dispositivo lleva un token aleatorio; aquí solo se guarda su
+// hash. Permite renovar la cookie de acceso (8 h) sin repetir el login mientras el dispositivo siga registrado.
+// Se borra al cerrar sesión, al vencer o al borrarse la cuenta.
+model SesionRefresco {
+  id        Int      @id @default(autoincrement())
+  negocioId Int
+  negocio   Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiraEn  DateTime
+  createdAt DateTime @default(now())
+
+  @@index([negocioId])
 }

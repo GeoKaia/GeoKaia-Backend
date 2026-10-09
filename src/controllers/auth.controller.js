@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const { responderError } = require('../utils/errores');
 const jwt = require('jsonwebtoken');
 const { fijarCookie, borrarCookie } = require('../utils/sesion');
+const { emitirRefresco, revocarRefresco } = require('../utils/refresco');
 const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
 const { TERMINOS_VERSION } = require('../config/legal');
@@ -121,6 +122,8 @@ exports.verificar2FA = async (req, res) => {
     );
     // El JWT va solo en la cookie httpOnly; el cuerpo no lo incluye para que JavaScript nunca lo tenga.
     fijarCookie(res, jwtToken);
+    // Segunda cookie, de dispositivo (7 días): si alguien borra solo la de acceso desde F12, la sesión se renueva sola.
+    await emitirRefresco(res, negocio.id);
     res.json({ mensaje: 'Sesión iniciada', esAdmin: negocio.esAdmin });
   } catch (err) {
     responderError(res, err);
@@ -148,7 +151,13 @@ exports.me = async (req, res) => {
   }
 };
 
-exports.logout = (req, res) => {
+exports.logout = async (req, res) => {
+  try {
+    // El dispositivo deja de valer en el servidor, aunque alguien conserve una copia de la cookie.
+    await revocarRefresco(req);
+  } catch (err) {
+    console.error('[error] No se pudo revocar el dispositivo al cerrar sesión:', err);
+  }
   borrarCookie(res);
   res.json({ mensaje: 'Sesión cerrada' });
 };
