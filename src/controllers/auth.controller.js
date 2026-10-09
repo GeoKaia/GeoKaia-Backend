@@ -1,4 +1,4 @@
-const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
@@ -8,10 +8,9 @@ const { borrarCookie } = require('../utils/sesion');
 const { TERMINOS_VERSION } = require('../config/legal');
 const auditoria = require('../services/auditoria');
 const sesiones = require('../services/sesiones');
-
-// Hash de relleno: si el correo no existe igual se hace una comparación bcrypt, para que responder
-// "usuario inexistente" no sea más rápido que "contraseña incorrecta" y no sirva para descubrir correos.
-const HASH_RELLENO = bcrypt.hashSync('relleno-no-es-una-contrasena', 10);
+const { hashear, verificar, necesitaRehash, verificarContraRelleno } = require('../utils/hashPassword');
+const { validarPassword } = require('../utils/password');
+const correo = require('../utils/correo');
 
 // Bloqueo temporal por cuenta (además de los límites por IP de limites.middleware.js, que se pueden esquivar
 // cambiando de IP): se cuenta en el historial de auditoría, que es persistente y común a todas las instancias.
@@ -34,7 +33,7 @@ exports.registrar = async (req, res) => {
   // jamás puede crear una.
   const { email, password, nombreContacto, whatsapp } = req.body;
   try {
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await hashear(password);
     const secret = speakeasy.generateSecret({ name: `GeoKaia (${email})` });
     const negocio = await prisma.negocio.create({
       data: {
@@ -75,13 +74,18 @@ exports.login = async (req, res) => {
       return res.status(429).json({ error: MENSAJE_BLOQUEO });
     }
     const negocio = await prisma.negocio.findUnique({ where: { email } });
-    const valida = await bcrypt.compare(password, negocio?.passwordHash ?? HASH_RELLENO);
+    // Si el correo no existe se hace igual una verificación completa (hash de relleno), para que el tiempo de respuesta no delate cuentas.
+    const valida = negocio ? await verificar(password, negocio.passwordHash) : await verificarContraRelleno(password);
     // Un solo mensaje y un solo código para "no existe" y "contraseña incorrecta": responder distinto
     // permitiría averiguar qué correos tienen cuenta.
     if (!negocio || !valida) {
       // En el historial sí se distingue el motivo (solo lo ve un administrador); al cliente no.
       await auditoria.registrar({ req, actor: null, accion: 'sesion.login_fallido', resultado: 'FALLO', negocioAfectadoId: negocio?.id ?? null, detalle: { email, motivo: negocio ? 'password' : 'cuenta_inexistente' } });
       return res.status(401).json({ error: 'Correo o contraseña incorrectos' });
+    }
+    // Cuentas con hash bcrypt (anteriores a Argon2id): se migran en silencio ahora que se conoce la contraseña.
+    if (necesitaRehash(negocio.passwordHash)) {
+      await prisma.negocio.update({ where: { id: negocio.id }, data: { passwordHash: await hashear(password) } });
     }
     const pasoToken = jwt.sign({ typ: '2fa', sub: String(negocio.id) }, process.env.JWT_SECRET, { expiresIn: '5m', algorithm: 'HS256' });
     res.json({ mensaje: 'Contraseña válida. Ingresá tu código 2FA.', pasoToken });
@@ -200,7 +204,7 @@ exports.eliminarCuenta = async (req, res) => {
       return res.status(403).json({ error: 'Esta cuenta no se puede eliminar' });
     }
 
-    const valida = await bcrypt.compare(password, negocio.passwordHash);
+    const valida = await verificar(password, negocio.passwordHash);
     if (!valida) return res.status(401).json({ error: 'Contraseña incorrecta' });
 
     await prisma.$transaction(async (tx) => {
@@ -218,6 +222,122 @@ exports.eliminarCuenta = async (req, res) => {
     await auditoria.registrar({ req, accion: 'cuenta.eliminar', recurso: { tipo: 'Negocio', id: negocio.id }, negocioAfectadoId: negocio.id });
     borrarCookie(res);
     res.json({ mensaje: 'Cuenta eliminada correctamente' });
+  } catch (err) {
+    responderError(res, err);
+  }
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Cambio y restablecimiento de contraseña. Las dos operaciones aplican la política de contraseñas (utils/password.js),
+// exigen el segundo factor, guardan el nuevo hash con Argon2id, cierran las sesiones que corresponda y quedan en el
+// historial de auditoría. Ninguna respuesta, registro de auditoría ni log incluye contraseñas ni tokens.
+// ---------------------------------------------------------------------------------------------------------------------
+
+const MAX_CAMBIO_FALLIDOS = 5;
+
+function totpValido(negocio, codigo) {
+  return !!negocio?.totpSecret && speakeasy.totp.verify({ secret: negocio.totpSecret, encoding: 'base32', token: codigo, window: 1 });
+}
+
+// Cambiar la propia contraseña estando con sesión. Pide la contraseña actual y el código 2FA (confirma que quien
+// cambia es la persona y no alguien que encontró la sesión abierta).
+exports.cambiarPassword = async (req, res) => {
+  const { passwordActual, passwordNueva, codigo2fa } = req.body;
+  try {
+    if ((await contarFallos('cuenta.password_cambio_fallido', { negocioId: req.negocio.id })) >= MAX_CAMBIO_FALLIDOS) {
+      return res.status(429).json({ error: MENSAJE_BLOQUEO });
+    }
+    const negocio = await prisma.negocio.findUnique({ where: { id: req.negocio.id } });
+    const fallo = async (motivo, estado, mensaje) => {
+      await auditoria.registrar({ req, accion: 'cuenta.password_cambio_fallido', resultado: 'FALLO', negocioAfectadoId: negocio.id, detalle: { motivo } });
+      return res.status(estado).json({ error: mensaje });
+    };
+    if (!(await verificar(passwordActual, negocio.passwordHash))) return fallo('password_actual', 401, 'La contraseña actual no es correcta');
+    if (!totpValido(negocio, codigo2fa)) return fallo('2fa', 401, 'Código 2FA incorrecto');
+
+    const errores = validarPassword(passwordNueva, negocio.email);
+    if (errores.length > 0) return res.status(400).json({ error: 'La contraseña nueva no cumple los requisitos', detalles: errores.map((mensaje) => ({ campo: 'passwordNueva', mensaje })) });
+    if (await verificar(passwordNueva, negocio.passwordHash)) {
+      return res.status(400).json({ error: 'La contraseña nueva no cumple los requisitos', detalles: [{ campo: 'passwordNueva', mensaje: 'La contraseña nueva tiene que ser distinta de la actual' }] });
+    }
+
+    await prisma.negocio.update({ where: { id: negocio.id }, data: { passwordHash: await hashear(passwordNueva) } });
+    // Cambio de credenciales: se cierran todas las demás sesiones y la actual recibe un identificador nuevo.
+    const cerradas = await sesiones.revocarTodas(negocio.id, 'cambio_de_contrasena');
+    await sesiones.crear(req, res, negocio);
+    await auditoria.registrar({ req, accion: 'cuenta.password_cambiada', negocioAfectadoId: negocio.id, detalle: { sesionesCerradas: cerradas } });
+    correo.enviar({ para: negocio.email, asunto: 'Cambiaste tu contraseña de GeoKaia', texto: 'La contraseña de tu cuenta de GeoKaia se cambió. Si no fuiste vos, escribinos de inmediato a geokaia404@gmail.com.' }).catch(() => {});
+    res.json({ mensaje: 'Contraseña actualizada. Se cerraron tus otras sesiones.' });
+  } catch (err) {
+    responderError(res, err);
+  }
+};
+
+const MINUTOS_VIGENCIA_ENLACE = 30;
+const hashToken = (t) => crypto.createHash('sha256').update(t).digest('hex');
+const MENSAJE_OLVIDE = 'Si el correo está registrado, te enviamos las instrucciones para restablecer la contraseña.';
+
+// Pedir el enlace de restablecimiento. Responde SIEMPRE lo mismo, exista o no la cuenta (no se puede usar para descubrir
+// correos). El trabajo real se hace después de responder para que tampoco lo delate el tiempo de respuesta.
+exports.olvidePassword = async (req, res) => {
+  const { email } = req.body;
+  res.json({ mensaje: MENSAJE_OLVIDE });
+  try {
+    await auditoria.registrar({ req, actor: null, accion: 'cuenta.reset_solicitado', detalle: { email } });
+    if (!correo.correoConfigurado()) return;
+    const negocio = await prisma.negocio.findUnique({ where: { email } });
+    if (!negocio) return;
+    // Un solo enlace vigente por cuenta, y como máximo 3 solicitudes por hora.
+    const recientes = await prisma.restablecerPassword.count({ where: { negocioId: negocio.id, createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) } } });
+    if (recientes >= 3) return;
+    await prisma.restablecerPassword.updateMany({ where: { negocioId: negocio.id, usadoEn: null }, data: { usadoEn: new Date() } });
+    const token = crypto.randomBytes(32).toString('base64url');
+    await prisma.restablecerPassword.create({ data: { negocioId: negocio.id, tokenHash: hashToken(token), expiraEn: new Date(Date.now() + MINUTOS_VIGENCIA_ENLACE * 60 * 1000) } });
+    const base = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+    await correo.enviar({
+      para: negocio.email,
+      asunto: 'Restablecer tu contraseña de GeoKaia',
+      texto: `Pediste restablecer tu contraseña.\n\nAbrí este enlace (vale ${MINUTOS_VIGENCIA_ENLACE} minutos y sirve una sola vez): ${base}/restablecer-password?token=${token}\n\nNecesitarás tu código de Google Authenticator. Si no fuiste vos, ignorá este correo: tu contraseña sigue igual.`,
+    });
+  } catch (err) {
+    console.error('[error] olvide-password:', err.message);
+  }
+};
+
+// Usar el enlace: token + código 2FA + contraseña nueva. Que alguien controle el correo no basta: también necesita el
+// segundo factor. Todas las sesiones de la cuenta se cierran.
+exports.restablecerPassword = async (req, res) => {
+  const { token, password, codigo2fa } = req.body;
+  const MENSAJE_INVALIDO = 'El enlace no es válido o ya venció. Pedí uno nuevo.';
+  try {
+    const registro = await prisma.restablecerPassword.findUnique({ where: { tokenHash: hashToken(token) }, include: { negocio: true } });
+    if (!registro || registro.usadoEn || registro.expiraEn < new Date()) {
+      await auditoria.registrar({ req, actor: null, accion: 'cuenta.reset_fallido', resultado: 'FALLO', detalle: { motivo: 'enlace_invalido' } });
+      return res.status(400).json({ error: MENSAJE_INVALIDO });
+    }
+    const negocio = registro.negocio;
+
+    if (!totpValido(negocio, codigo2fa)) {
+      const intentos = registro.intentos + 1;
+      // Cinco códigos incorrectos anulan el enlace: no se puede adivinar el 2FA con un enlace robado.
+      await prisma.restablecerPassword.update({ where: { id: registro.id }, data: { intentos, ...(intentos >= 5 ? { usadoEn: new Date() } : {}) } });
+      await auditoria.registrar({ req, actor: null, accion: 'cuenta.reset_fallido', resultado: 'FALLO', negocioAfectadoId: negocio.id, detalle: { motivo: '2fa', intentos } });
+      return res.status(401).json({ error: intentos >= 5 ? MENSAJE_INVALIDO : 'Código 2FA incorrecto' });
+    }
+
+    const errores = validarPassword(password, negocio.email);
+    if (errores.length > 0) {
+      return res.status(400).json({ error: 'La contraseña nueva no cumple los requisitos', detalles: errores.map((mensaje) => ({ campo: 'password', mensaje })) });
+    }
+
+    await prisma.$transaction([
+      prisma.negocio.update({ where: { id: negocio.id }, data: { passwordHash: await hashear(password) } }),
+      prisma.restablecerPassword.updateMany({ where: { negocioId: negocio.id, usadoEn: null }, data: { usadoEn: new Date() } }),
+    ]);
+    const cerradas = await sesiones.revocarTodas(negocio.id, 'restablecimiento_de_contrasena');
+    await auditoria.registrar({ req, actor: null, accion: 'cuenta.password_restablecida', negocioAfectadoId: negocio.id, detalle: { sesionesCerradas: cerradas } });
+    correo.enviar({ para: negocio.email, asunto: 'Restableciste tu contraseña de GeoKaia', texto: 'La contraseña de tu cuenta de GeoKaia se restableció. Si no fuiste vos, escribinos de inmediato a geokaia404@gmail.com.' }).catch(() => {});
+    res.json({ mensaje: 'Contraseña restablecida. Iniciá sesión con la nueva.' });
   } catch (err) {
     responderError(res, err);
   }

@@ -68,7 +68,9 @@ Este repo es solo el backend (API REST). El frontend vive en [GeoKaia-Frontend](
 | Prisma ORM | 7.8 | Modelado de datos y acceso a la base (vía `@prisma/adapter-pg`) |
 | Zod | 4.x | Validación de esquemas en cada endpoint de escritura |
 | JWT (jsonwebtoken) | 9.x | Autenticación de negocios, sesión válida por 8 horas |
-| bcrypt | 6.x | Hash de contraseñas |
+| argon2 (Argon2id) | 0.x | Hash de contraseñas con sal propia (parámetros OWASP: 19 MiB, 2 iteraciones, 1 hilo) |
+| bcrypt | 6.x | Solo para verificar cuentas antiguas; se migran a Argon2id al iniciar sesión |
+| nodemailer | 7.x | Correos de restablecimiento y aviso de cambio de contraseña (requiere `SMTP_URL`) |
 | Speakeasy + qrcode | — | Verificación en dos pasos (TOTP / Google Authenticator) |
 | Groq SDK (`openai/gpt-oss-20b`) | — | Agente de IA que recomienda rutas existentes según lo que pide el turista |
 | Helmet | 8.x | Cabeceras HTTP de seguridad |
@@ -164,7 +166,9 @@ En producción, el proceso se levanta con `node src/index.js` — actualmente de
 | `pg` | Driver de PostgreSQL usado por el adapter de Prisma |
 | `zod` | Validación de los `req.body` de cada endpoint de escritura |
 | `jsonwebtoken` | Emisión y verificación de JWT |
-| `bcrypt` | Hash y comparación de contraseñas |
+| `argon2` | Hash Argon2id de contraseñas |
+| `bcrypt` | Verificación de hashes antiguos (se migran a Argon2id) |
+| `nodemailer` | Envío de correos transaccionales |
 | `speakeasy` | Generación y verificación de códigos TOTP (2FA) |
 | `qrcode` | Genera el QR que el negocio escanea para activar 2FA |
 | `groq-sdk` | Cliente del modelo de IA (`openai/gpt-oss-20b`) que recomienda rutas |
@@ -192,6 +196,9 @@ Copiá `.env.example` a `.env` y completá:
 | `TRUST_PROXY_HOPS` | No | Cantidad de proxies delante del backend (default `1`). Con el frontend reenviando `/api` por rewrites (Vercel) o con Nginx delante, poné `2` para que los límites de peticiones cuenten por visitante |
 | `SESION_MAX_HORAS` | No | Duración máxima absoluta de una sesión, en horas (default `8`) |
 | `SESION_INACTIVIDAD_MIN` | No | Minutos de inactividad tras los que la sesión vence (default `30`) |
+| `SMTP_URL` | No | Servidor SMTP para los correos (por ejemplo `smtps://usuario:clave@smtp.proveedor.com:465`). Sin él, el restablecimiento de contraseña queda inactivo (se recupera por soporte) |
+| `MAIL_FROM` | No | Remitente de los correos, por ejemplo `GeoKaia <no-responder@tu-dominio.com>` |
+| `FRONTEND_URL` | No | URL pública del frontend, usada en el enlace de restablecimiento (default `http://localhost:3000`) |
 
 ---
 
@@ -215,7 +222,9 @@ src/
 │   └── validarId.middleware.js  # Rechaza con 400 cualquier :id que no sea un entero positivo
 ├── utils/
 │   ├── validarUrls.js           # Verifica que cada link sea http(s) y lo que dice ser (foto, Maps, Waze)
-│   ├── password.js              # Política de contraseñas nuevas (12+ caracteres, mayúscula, minúscula, número, símbolo)
+│   ├── password.js              # Política de contraseñas: 12+ caracteres, mayúscula, número, símbolo (se permiten espacios y minúsculas; máx. 128)
+│   ├── hashPassword.js          # Argon2id con sal (y verificación de hashes bcrypt antiguos)
+│   ├── correo.js                # Envío de correos (SMTP) y captura en pruebas
 │   ├── sesion.js                # Cookie de sesión httpOnly (nombre, atributos, fijar, borrar, leer)
 │   └── errores.js               # Respuesta 500 genérica; el detalle queda solo en el log
 prisma/
@@ -242,6 +251,9 @@ Base URL: `https://geokaia-backend.onrender.com` (o `http://localhost:4000` en l
 | GET | `/me` | 🔒 | Quién es el usuario de la sesión (`esAdmin`, `tieneLugar`) y cuándo vence; el rol sale de la base en cada llamada |
 | POST | `/logout` | 🔓 | Revoca la sesión en el servidor y borra la cookie |
 | POST | `/logout-todas` | 🔒 | Revoca todas las sesiones de la cuenta |
+| POST | `/cambiar-password` | 🔒 | Cambia la contraseña propia: exige la actual + código 2FA + la nueva (política completa). Cierra las demás sesiones y avisa por correo |
+| POST | `/olvide-password` | 🔓 | Pide el enlace de restablecimiento. Responde siempre lo mismo exista o no la cuenta |
+| POST | `/restablecer-password` | 🔓 | Enlace (un solo uso, 30 min) + código 2FA + contraseña nueva. Cierra todas las sesiones |
 | GET | `/sesiones` | 🔒 | Lista las sesiones activas propias (sin hashes) |
 | DELETE | `/sesiones/:id` | 🔒 | Cierra una sesión propia (con el id de otra cuenta responde 404) |
 | DELETE | `/cuenta` | 🔒 | Borra la cuenta y su lugar (pide la contraseña de nuevo) |
@@ -332,7 +344,7 @@ La API se protege en capas. Cada una corresponde a un tipo de ataque habitual:
 | **Fuga de información** | Los errores 500 devuelven un mensaje genérico (el detalle queda en el log). `GET /api/lugares/:id` ya no incluye al negocio dueño y solo devuelve lugares aprobados. Rutas inexistentes y JSON inválido responden 404/400 sin trazas. |
 | **Acceso no autorizado** | `authMiddleware` exige un JWT válido (algoritmo HS256 fijado); `adminMiddleware` re-consulta en la base que la cuenta tenga `esAdmin: true` (no confía en el contenido del token). El registro público no puede crear administradores. |
 | **Orígenes no autorizados** | CORS con lista de orígenes (`CORS_ORIGINS`); `helmet` agrega HSTS, `nosniff` y demás cabeceras de seguridad. |
-| **Robo de credenciales** | Contraseñas nuevas de 12 a 72 caracteres con mayúscula, minúscula, número y símbolo, sin espacios, sin claves comunes ni el correo (`utils/password.js`; el login no la exige para no dejar afuera a cuentas anteriores), guardadas con `bcrypt` (costo 12); autenticación en dos factores TOTP (`speakeasy`) obligatoria; las sesiones viven en el servidor (tabla `Sesion`): cookie opaca `httpOnly` + `SameSite=Lax` (+ `Secure` y prefijo `__Host-` en producción), duración máxima de 8 h, vencimiento por 30 min de inactividad, identificador nuevo en cada login, revocación al cerrar sesión o ante un incidente; bloqueo temporal de la cuenta tras intentos fallidos; CORS con `credentials` y verificación de `Origin` (obligatorio si la petición lleva la cookie) contra CSRF. |
+| **Robo de credenciales** | Contraseñas de al menos 12 caracteres con mayúscula, número y símbolo (`utils/password.js`; se validan en el servidor al registrar, cambiar y restablecer, no al iniciar sesión para no dejar afuera a cuentas anteriores), guardadas con **Argon2id** y sal propia; las cuentas con bcrypt se migran al iniciar sesión; el restablecimiento exige enlace de un solo uso **y** código 2FA, y cierra todas las sesiones; autenticación en dos factores TOTP (`speakeasy`) obligatoria; las sesiones viven en el servidor (tabla `Sesion`): cookie opaca `httpOnly` + `SameSite=Lax` (+ `Secure` y prefijo `__Host-` en producción), duración máxima de 8 h, vencimiento por 30 min de inactividad, identificador nuevo en cada login, revocación al cerrar sesión o ante un incidente; bloqueo temporal de la cuenta tras intentos fallidos; CORS con `credentials` y verificación de `Origin` (obligatorio si la petición lleva la cookie) contra CSRF. |
 | **Manipulación de la IA** | La consulta del turista tiene tope de 500 caracteres y la respuesta del modelo se filtra: solo se devuelven rutas que existen en el catálogo, con textos de largo acotado. |
 
 **Limitaciones conocidas:** el paso de 2FA recibe el `negocioId` que devuelve el login, no un token temporal firmado (el límite por cuenta mitiga el abuso, pero un token de "paso 1" sería lo ideal); los límites de peticiones son por instancia; y no hay una suite de pruebas automatizadas, por lo que las defensas se verificaron manualmente con peticiones de ataque contra la API.

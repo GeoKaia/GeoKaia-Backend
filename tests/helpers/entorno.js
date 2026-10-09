@@ -34,7 +34,16 @@ async function iniciarEntorno({ env: envExtra = {} } = {}) {
     const EmbeddedPostgres = require('embedded-postgres').default;
     const puertoDb = await puertoLibre();
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'geokaia-pg-'));
-    pgEmbebido = new EmbeddedPostgres({ databaseDir: dir, user: 'postgres', password: 'postgres', port: puertoDb, persistent: false });
+    // Base descartable: sin fsync (más rápida y sin cuelgues de initdb en discos lentos o con antivirus).
+    pgEmbebido = new EmbeddedPostgres({
+      databaseDir: dir,
+      user: 'postgres',
+      password: 'postgres',
+      port: puertoDb,
+      persistent: false,
+      initdbFlags: ['--no-sync'],
+      postgresFlags: ['-c', 'fsync=off', '-c', 'synchronous_commit=off', '-c', 'full_page_writes=off'],
+    });
     await pgEmbebido.initialise();
     await pgEmbebido.start();
     await pgEmbebido.createDatabase('geokaia');
@@ -42,6 +51,7 @@ async function iniciarEntorno({ env: envExtra = {} } = {}) {
   }
 
   const puertoApi = await puertoLibre();
+  const archivoCorreo = path.join(os.tmpdir(), `geokaia-correo-${Date.now()}-${Math.random().toString(36).slice(2)}.jsonl`);
   const env = {
     ...process.env,
     DATABASE_URL: databaseUrl,
@@ -51,6 +61,8 @@ async function iniciarEntorno({ env: envExtra = {} } = {}) {
     JWT_SECRET: 'secreto-de-pruebas-largo-y-aleatorio-0123456789',
     // En pruebas no se manda correo real: el servidor deja el último mensaje en memoria (ver utils/correo.js).
     CORREO_PRUEBAS: 'true',
+    CORREO_PRUEBAS_ARCHIVO: archivoCorreo,
+    FRONTEND_URL: 'http://localhost:3000',
     ...envExtra,
   };
   execSync('npx prisma migrate deploy', { cwd: RAIZ, env, stdio: 'pipe' });
@@ -79,6 +91,8 @@ async function iniciarEntorno({ env: envExtra = {} } = {}) {
     db,
     env,
     logs: () => logs,
+    // Correos que el servidor "envió" durante la prueba (ver utils/correo.js).
+    correos: () => (fs.existsSync(archivoCorreo) ? fs.readFileSync(archivoCorreo, 'utf8').split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l)) : []),
     async detener() {
       await db.end().catch(() => {});
       servidor.kill();

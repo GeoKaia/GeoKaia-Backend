@@ -1,4 +1,4 @@
-const bcrypt = require('bcrypt');
+const { verificar } = require('../utils/hashPassword');
 const { responderError } = require('../utils/errores');
 const auditoria = require('../services/auditoria');
 const { PrismaClient } = require('@prisma/client');
@@ -191,7 +191,7 @@ exports.eliminarMiLugar = async (req, res) => {
       return res.status(404).json({ error: 'Este negocio no tiene un lugar registrado' });
     }
 
-    const valida = await bcrypt.compare(password, negocio.passwordHash);
+    const valida = await verificar(password, negocio.passwordHash);
     if (!valida) return res.status(401).json({ error: 'Contraseña incorrecta' });
 
     const lugarId = negocio.lugarId;
