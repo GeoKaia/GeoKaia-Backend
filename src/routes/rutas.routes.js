@@ -4,7 +4,7 @@ const { z } = require('zod');
 const validate = require('../middleware/validate.middleware');
 const rutasController = require('../controllers/rutas.controller');
 const authMiddleware = require('../middleware/auth.middleware');
-const adminMiddleware = require('../middleware/admin.middleware');
+const { requierePermiso } = require('../rbac/permisos');
 const validarId = require('../middleware/validarId.middleware');
 const { esUrlHttp } = require('../utils/validarUrls');
 
@@ -53,8 +53,8 @@ const actualizarRutaSchema = z.object({
 router.param('id', validarId);
 
 router.get('/', rutasController.obtenerTodas);
-router.post('/', authMiddleware, adminMiddleware, validate(crearRutaSchema), rutasController.crear);
-router.patch('/:id', authMiddleware, adminMiddleware, validate(actualizarRutaSchema), rutasController.actualizar);
-router.delete('/:id', authMiddleware, adminMiddleware, rutasController.eliminar);
+router.post('/', authMiddleware, requierePermiso('ruta:gestionar'), validate(crearRutaSchema), rutasController.crear);
+router.patch('/:id', authMiddleware, requierePermiso('ruta:gestionar'), validate(actualizarRutaSchema), rutasController.actualizar);
+router.delete('/:id', authMiddleware, requierePermiso('ruta:gestionar'), rutasController.eliminar);
 
 module.exports = router;

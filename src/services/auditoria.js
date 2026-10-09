@@ -53,9 +53,10 @@ function calcularHash(hashPrevio, r) {
   return crypto.createHash('sha256').update(contenido).digest('hex');
 }
 
+const { rolDe: rolDeCuenta } = require('../rbac/roles');
+
 function rolDe(actor) {
-  if (!actor) return 'ANONIMO';
-  return actor.esAdmin ? 'ADMIN' : 'PROPIETARIO';
+  return actor ? rolDeCuenta(actor) : 'ANONIMO';
 }
 
 // Registra una acción. Nunca lanza: una falla de auditoría se escribe en el log del servidor pero no tumba la

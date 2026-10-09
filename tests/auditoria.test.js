@@ -50,13 +50,14 @@ test('aprobar un lugar (administrador) queda auditado con el dueño afectado', a
   const reg = (await filas(`where accion = 'lugar.estado'`)).at(-1);
   assert.equal(reg.actorRol, 'ADMIN');
   assert.ok(reg.negocioAfectadoId, 'falta el negocio afectado');
-  assert.equal(reg.detalle.estado, 'APROBADO');
+  assert.equal(reg.detalle.a, 'APROBADO');
+  assert.equal(reg.detalle.de, 'PENDIENTE');
 });
 
 test('un usuario sin rol admin que llama a /api/admin queda registrado como acceso denegado', async () => {
   const r = await dueno.get('/api/admin/auditoria');
   assert.equal(r.status, 403);
-  const reg = (await filas(`where accion = 'acceso.denegado_admin'`)).at(-1);
+  const reg = (await filas(`where accion = 'acceso.denegado'`)).at(-1);
   assert.equal(reg.actorEmail, 'dueno@correo.com');
   assert.equal(reg.resultado, 'DENEGADO');
 });

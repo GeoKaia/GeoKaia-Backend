@@ -48,7 +48,7 @@ async function validar(req) {
   if (!token) return { ok: false, motivo: 'sin_cookie' };
   const sesion = await prisma.sesion.findUnique({
     where: { tokenHash: hash(token) },
-    include: { negocio: { select: { id: true, email: true, esAdmin: true } } },
+    include: { negocio: { select: { id: true, email: true, esAdmin: true, esResponsable: true } } },
   });
   if (!sesion) return { ok: false, motivo: 'desconocida' };
   if (sesion.revocadaEn) return { ok: false, motivo: 'revocada', sesion };
@@ -78,7 +78,7 @@ async function revocarTodas(negocioId, motivo, { excepto } = {}) {
 async function cerrar(req, res, motivo = 'logout') {
   const token = leerCookie(req);
   if (token) {
-    const s = await prisma.sesion.findUnique({ where: { tokenHash: hash(token) }, include: { negocio: { select: { id: true, email: true, esAdmin: true } } } });
+    const s = await prisma.sesion.findUnique({ where: { tokenHash: hash(token) }, include: { negocio: { select: { id: true, email: true, esAdmin: true, esResponsable: true } } } });
     if (s && !s.revocadaEn) {
       await revocar(s.id, motivo);
       await auditoria.registrar({ req, actor: s.negocio, accion: 'sesion.logout', negocioAfectadoId: s.negocio.id, detalle: { motivo } });

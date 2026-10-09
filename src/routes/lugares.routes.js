@@ -4,7 +4,7 @@ const { z } = require('zod');
 const validate = require('../middleware/validate.middleware');
 const lugaresController = require('../controllers/lugares.controller');
 const authMiddleware = require('../middleware/auth.middleware'); // Traemos al guardia
-const adminMiddleware = require('../middleware/admin.middleware');
+const { requierePermiso } = require('../rbac/permisos');
 const validarId = require('../middleware/validarId.middleware');
 const { esUrlDeFotoValida, esUrlDeGoogleMaps, esUrlDeWaze, esUrlHttp } = require('../utils/validarUrls');
 
@@ -70,66 +70,30 @@ const eliminarLugarSchema = z.object({
   password: z.string().min(1, 'La contraseña es obligatoria').max(72, 'La contraseña es demasiado larga'),
 });
 
-// [Admin] aprobar/rechazar un lugar
+// [Admin] moderar un lugar recién enviado: solo se decide entre aprobarlo o rechazarlo. Cambiar la visibilidad de un
+// lugar ya publicado no se hace aquí: es una excepción y pasa por el procedimiento de escalamiento.
 const actualizarEstadoSchema = z.object({
-  estado: z.enum(['PENDIENTE', 'APROBADO', 'RECHAZADO']),
+  estado: z.enum(['APROBADO', 'RECHAZADO']),
 });
-
-// [Admin] editar cualquier lugar: mismas reglas que actualizarLugarSchema, mas 'estado' opcional
-// (el admin puede corregir contenido y aprobar/rechazar en el mismo paso).
-const actualizarLugarAdminSchema = z.object({
-  nombre: z.string().trim().min(3, 'El nombre debe tener al menos 3 caracteres').max(120, 'El nombre es demasiado largo').optional(),
-  categoria: z.enum(CATEGORIAS).optional(),
-  latitud: latitudSchema.optional(),
-  longitud: longitudSchema.optional(),
-  descripcion: z.string().trim().min(10, 'La descripción debe tener al menos 10 caracteres').max(2000, 'La descripción es demasiado larga').optional(),
-  subcategoria: z.string().trim().min(2, 'La subcategoría es muy corta').max(60, 'La subcategoría es demasiado larga').optional(),
-  horarios: z.string().max(200, 'Los horarios son demasiado largos').optional(),
-  mapsUrl: urlHttp('mapsUrl').optional(),
-  wazeUrl: urlHttp('wazeUrl').optional(),
-  fotoUrl: urlHttp('fotoUrl').optional(),
-  panoramaUrl: urlHttp('panoramaUrl').optional(),
-  videoUrl: urlHttp('videoUrl').optional(),
-  galeriaUrls: z.array(urlHttp('Cada elemento de galeriaUrls')).max(5, 'Máximo 5 fotos adicionales').optional(),
-  whatsapp: z.string().trim().min(8, 'El número de WhatsApp es muy corto').max(25, 'El número de WhatsApp es demasiado largo').optional(),
-  menuUrl: urlHttp('menuUrl').optional(),
-  audioUrl: urlHttp('audioUrl').optional(),
-  estado: z.enum(['PENDIENTE', 'APROBADO', 'RECHAZADO']).optional(),
-}).refine((data) => Object.keys(data).length > 0, {
-  message: 'Debés enviar al menos un campo para actualizar',
-});
-
-// [Admin] nota para el negocio: reemplaza a la edición directa de su lugar.
-const comentarioSchema = z.object({
-  texto: z.string().trim().min(3, 'El comentario debe tener al menos 3 caracteres').max(1000, 'El comentario no puede pasar de 1000 caracteres'),
-});
-
-// La edición directa de lugares ajenos está APAGADA por defecto (es mala señal que el equipo cambie lo que
-// escribió cada negocio). Se puede reactivar sin tocar código con ADMIN_EDICION_LUGARES=true, por ejemplo
-// para cargar contenido real antes de una entrega. Borrar y aprobar/rechazar siguen disponibles.
-const edicionAdminHabilitada = (req, res, next) => {
-  if (process.env.ADMIN_EDICION_LUGARES === 'true') return next();
-  res.status(403).json({ error: 'La edición directa de lugares está desactivada. Dejale un comentario al negocio para que lo corrija él mismo.' });
-};
 
 // IMPORTANTE: '/mi-lugar' y '/admin/*' van antes de '/:id' para que Express no las confunda con un ID
 router.param('id', validarId);
 
+// Permisos (src/rbac/permisos.js), verificados en el servidor en cada petición:
+//  - Funciones del propietario: solo la cuenta que es dueña de su negocio. Las rutas "mi-lugar" no reciben ningún id:
+//    el negocio se toma de la sesión, así que no hay forma de apuntar al lugar de otra persona (IDOR).
+//  - Funciones de supervisión: administradores, SOLO LECTURA sobre los lugares. No existe ninguna ruta para que un
+//    administrador cree, edite o borre el lugar de otro negocio; para comunicarse con él están las conversaciones, y las
+//    excepciones pasan por escalamientos.
 router.get('/', lugaresController.obtenerTodos);
-router.get('/mi-lugar', authMiddleware, lugaresController.obtenerMiLugar);
-router.get('/mi-lugar/comentarios', authMiddleware, lugaresController.obtenerMisComentarios);
-router.get('/admin/pendientes', authMiddleware, adminMiddleware, lugaresController.obtenerPendientes);
-router.get('/admin/todos', authMiddleware, adminMiddleware, lugaresController.obtenerTodosAdmin);
+router.get('/mi-lugar', authMiddleware, requierePermiso('lugar:editar_propio'), lugaresController.obtenerMiLugar);
+router.get('/admin/pendientes', authMiddleware, requierePermiso('lugar:ver_todos'), lugaresController.obtenerPendientes);
+router.get('/admin/todos', authMiddleware, requierePermiso('lugar:ver_todos'), lugaresController.obtenerTodosAdmin);
 router.get('/:id', lugaresController.obtenerPorId);
 
-router.post('/', authMiddleware, validate(crearLugarSchema), lugaresController.crear);
-router.patch('/mi-lugar', authMiddleware, validate(actualizarLugarSchema), lugaresController.actualizarMiLugar);
-router.delete('/mi-lugar', authMiddleware, validate(eliminarLugarSchema), lugaresController.eliminarMiLugar);
-router.patch('/admin/:id/estado', authMiddleware, adminMiddleware, validate(actualizarEstadoSchema), lugaresController.actualizarEstado);
-router.patch('/admin/:id', authMiddleware, adminMiddleware, edicionAdminHabilitada, validate(actualizarLugarAdminSchema), lugaresController.actualizarLugarAdmin);
-router.get('/admin/:id/comentarios', authMiddleware, adminMiddleware, lugaresController.listarComentariosAdmin);
-router.post('/admin/:id/comentarios', authMiddleware, adminMiddleware, validate(comentarioSchema), lugaresController.crearComentarioAdmin);
-router.delete('/admin/comentarios/:comentarioId', authMiddleware, adminMiddleware, lugaresController.eliminarComentarioAdmin);
-router.delete('/admin/:id', authMiddleware, adminMiddleware, lugaresController.eliminarLugarAdmin);
+router.post('/', authMiddleware, requierePermiso('lugar:crear_propio'), validate(crearLugarSchema), lugaresController.crear);
+router.patch('/mi-lugar', authMiddleware, requierePermiso('lugar:editar_propio'), validate(actualizarLugarSchema), lugaresController.actualizarMiLugar);
+router.delete('/mi-lugar', authMiddleware, requierePermiso('lugar:borrar_propio'), validate(eliminarLugarSchema), lugaresController.eliminarMiLugar);
+router.patch('/admin/:id/estado', authMiddleware, requierePermiso('lugar:moderar_nuevos'), validate(actualizarEstadoSchema), lugaresController.actualizarEstado);
 
 module.exports = router;
