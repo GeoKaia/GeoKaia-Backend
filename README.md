@@ -187,6 +187,8 @@ Copiá `.env.example` a `.env` y completá:
 | `GROQ_API_KEY` | Sí | API Key de Groq, usada por el agente de recomendación de rutas |
 | `PORT` | No | Puerto del servidor. Default `4000` si no se define |
 | `CORS_ORIGINS` | No | Orígenes del navegador autorizados a llamar a la API, separados por coma. Se suman a los dominios del frontend (`geokaia.vercel.app` y `geo-kaia-frontend.vercel.app`); `localhost` siempre se permite para desarrollo |
+| `COOKIE_SECURE` | No | Fuerza (`true`) o quita (`false`) el atributo `Secure` de la cookie de sesión. Por defecto es `Secure` cuando `NODE_ENV=production` |
+| `TRUST_PROXY_HOPS` | No | Cantidad de proxies delante del backend (default `1`). Con el frontend reenviando `/api` por rewrites (Vercel) o con Nginx delante, poné `2` para que los límites de peticiones cuenten por visitante |
 
 ---
 
@@ -210,6 +212,7 @@ src/
 │   └── validarId.middleware.js  # Rechaza con 400 cualquier :id que no sea un entero positivo
 ├── utils/
 │   ├── validarUrls.js           # Verifica que cada link sea http(s) y lo que dice ser (foto, Maps, Waze)
+│   ├── sesion.js                # Cookie de sesión httpOnly (fijar, borrar y leer el JWT)
 │   └── errores.js               # Respuesta 500 genérica; el detalle queda solo en el log
 prisma/
 ├── schema.prisma                # Modelo de datos (Negocio, Lugar, Ruta, ParadaRuta, Lead)
