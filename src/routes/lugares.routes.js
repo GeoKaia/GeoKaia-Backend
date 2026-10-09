@@ -70,33 +70,10 @@ const eliminarLugarSchema = z.object({
   password: z.string().min(1, 'La contraseña es obligatoria').max(72, 'La contraseña es demasiado larga'),
 });
 
-// [Admin] aprobar/rechazar un lugar
+// [Admin] aprobar o rechazar un lugar PENDIENTE. El admin no edita ni borra lugares ajenos: cada negocio
+// administra lo suyo, y el admin solo decide si lo que se registró sale al mapa público.
 const actualizarEstadoSchema = z.object({
-  estado: z.enum(['PENDIENTE', 'APROBADO', 'RECHAZADO']),
-});
-
-// [Admin] editar cualquier lugar: mismas reglas que actualizarLugarSchema, mas 'estado' opcional
-// (el admin puede corregir contenido y aprobar/rechazar en el mismo paso).
-const actualizarLugarAdminSchema = z.object({
-  nombre: z.string().trim().min(3, 'El nombre debe tener al menos 3 caracteres').max(120, 'El nombre es demasiado largo').optional(),
-  categoria: z.enum(CATEGORIAS).optional(),
-  latitud: latitudSchema.optional(),
-  longitud: longitudSchema.optional(),
-  descripcion: z.string().trim().min(10, 'La descripción debe tener al menos 10 caracteres').max(2000, 'La descripción es demasiado larga').optional(),
-  subcategoria: z.string().trim().min(2, 'La subcategoría es muy corta').max(60, 'La subcategoría es demasiado larga').optional(),
-  horarios: z.string().max(200, 'Los horarios son demasiado largos').optional(),
-  mapsUrl: urlHttp('mapsUrl').optional(),
-  wazeUrl: urlHttp('wazeUrl').optional(),
-  fotoUrl: urlHttp('fotoUrl').optional(),
-  panoramaUrl: urlHttp('panoramaUrl').optional(),
-  videoUrl: urlHttp('videoUrl').optional(),
-  galeriaUrls: z.array(urlHttp('Cada elemento de galeriaUrls')).max(5, 'Máximo 5 fotos adicionales').optional(),
-  whatsapp: z.string().trim().min(8, 'El número de WhatsApp es muy corto').max(25, 'El número de WhatsApp es demasiado largo').optional(),
-  menuUrl: urlHttp('menuUrl').optional(),
-  audioUrl: urlHttp('audioUrl').optional(),
-  estado: z.enum(['PENDIENTE', 'APROBADO', 'RECHAZADO']).optional(),
-}).refine((data) => Object.keys(data).length > 0, {
-  message: 'Debés enviar al menos un campo para actualizar',
+  estado: z.enum(['APROBADO', 'RECHAZADO'], { message: 'El estado debe ser APROBADO o RECHAZADO' }),
 });
 
 // IMPORTANTE: '/mi-lugar' y '/admin/*' van antes de '/:id' para que Express no las confunda con un ID
@@ -112,7 +89,5 @@ router.post('/', authMiddleware, validate(crearLugarSchema), lugaresController.c
 router.patch('/mi-lugar', authMiddleware, validate(actualizarLugarSchema), lugaresController.actualizarMiLugar);
 router.delete('/mi-lugar', authMiddleware, validate(eliminarLugarSchema), lugaresController.eliminarMiLugar);
 router.patch('/admin/:id/estado', authMiddleware, adminMiddleware, validate(actualizarEstadoSchema), lugaresController.actualizarEstado);
-router.patch('/admin/:id', authMiddleware, adminMiddleware, validate(actualizarLugarAdminSchema), lugaresController.actualizarLugarAdmin);
-router.delete('/admin/:id', authMiddleware, adminMiddleware, lugaresController.eliminarLugarAdmin);
 
 module.exports = router;
