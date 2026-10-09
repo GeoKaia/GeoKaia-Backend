@@ -3,7 +3,7 @@
 [![Known Vulnerabilities](https://snyk.io/test/github/GeoKaia/GeoKaia-Backend/badge.svg)](https://snyk.io/test/github/GeoKaia/GeoKaia-Backend)
 
 API REST del sistema GeoKaia — Plataforma de turismo digital para Nicaragua.
-Deployada en: https://geokaia-backend.onrender.com
+Deployada en: https://geokaia.northcentralus.cloudapp.azure.com (la API responde bajo `/api`)
 
 > Plataforma interactiva de turismo creativo y cultural en Nicaragua que utiliza IA para recomendar rutas curadas y experiencias inmersivas 360°. Proyecto desarrollado por el equipo Techyardigans para el Hackathon Nicaragua 2026 (categoría Avanzado).
 
@@ -16,7 +16,7 @@ Deployada en: https://geokaia-backend.onrender.com
   <a href="https://expressjs.com"><img src="https://img.shields.io/badge/Express-5-10546F?style=for-the-badge&logo=express&logoColor=white&labelColor=3A2B1D" alt="Express 5" /></a>
   <a href="https://www.prisma.io"><img src="https://img.shields.io/badge/Prisma-7-10546F?style=for-the-badge&logo=prisma&logoColor=white&labelColor=3A2B1D" alt="Prisma 7" /></a>
   <a href="https://www.postgresql.org"><img src="https://img.shields.io/badge/PostgreSQL-15%2B-2989A3?style=for-the-badge&logo=postgresql&logoColor=white&labelColor=3A2B1D" alt="PostgreSQL 15" /></a>
-  <a href="https://neon.com"><img src="https://img.shields.io/badge/Neon-serverless-2989A3?style=for-the-badge&logo=neon&logoColor=white&labelColor=3A2B1D" alt="Neon serverless" /></a>
+  <a href="https://www.docker.com"><img src="https://img.shields.io/badge/Docker-contenedores-2989A3?style=for-the-badge&logo=docker&logoColor=white&labelColor=3A2B1D" alt="Docker" /></a>
 </p>
 
 <p align="center">
@@ -24,7 +24,8 @@ Deployada en: https://geokaia-backend.onrender.com
   <a href="https://jwt.io"><img src="https://img.shields.io/badge/JWT-8h%20%2B%202FA-AC6727?style=for-the-badge&logo=jsonwebtokens&logoColor=white&labelColor=3A2B1D" alt="JWT" /></a>
   <a href="https://helmetjs.github.io"><img src="https://img.shields.io/badge/Helmet-headers-AC6727?style=for-the-badge&labelColor=3A2B1D" alt="Helmet" /></a>
   <a href="https://groq.com"><img src="https://img.shields.io/badge/Groq-IA-AC6727?style=for-the-badge&labelColor=3A2B1D" alt="Groq" /></a>
-  <a href="https://render.com"><img src="https://img.shields.io/badge/Render-deploy-3A2B1D?style=for-the-badge&logo=render&logoColor=white&labelColor=3A2B1D" alt="Desplegado en Render" /></a>
+  <a href="https://azure.microsoft.com"><img src="https://img.shields.io/badge/Azure-VM-3A2B1D?style=for-the-badge&logo=microsoftazure&logoColor=white&labelColor=3A2B1D" alt="Desplegado en Azure" /></a>
+  <a href="https://nginx.org"><img src="https://img.shields.io/badge/Nginx-proxy%20inverso-3A2B1D?style=for-the-badge&logo=nginx&logoColor=white&labelColor=3A2B1D" alt="Nginx" /></a>
 </p>
 
 ---
@@ -41,6 +42,7 @@ Deployada en: https://geokaia-backend.onrender.com
 - [Estructura modular](#estructura-modular)
 - [Endpoints de la API](#endpoints-de-la-api)
 - [Seguridad](#seguridad)
+- [Despliegue en Azure](#despliegue-en-azure)
 - [Contribuciones](#contribuciones)
 - [Licencia](#licencia)
 
@@ -54,7 +56,7 @@ El sistema está diseñado para dos tipos de usuarios:
 * **Turistas (B2C)**: acceden a exploración sin fricción y sin login requerido, visualizan el mapa con pines diferenciados por categoría/subcategoría, y consultan a Kaia, un agente de IA que recomienda rutas ya existentes según lo que el turista describe (no genera rutas nuevas).
 * **Negocios y MiPymes (B2B)**: mediante un modelo Freemium/Premium, un negocio registra su lugar (queda pendiente de aprobación del equipo GeoKaia), y con el plan Premium suma galería de fotos, video, visor 360° (Pannellum), menú digital y audio descriptivo.
 
-Este repo es solo el backend (API REST). El frontend vive en [GeoKaia-Frontend](https://github.com/GeoKaia/GeoKaia-Frontend).
+Este repo es solo el backend (API REST). El frontend vive en [GeoKaia-Frontend](https://github.com/GeoKaia/GeoKaia-Frontend). Ambos repositorios se despliegan juntos con la configuración de la carpeta `deploy/` (ver [Despliegue en Azure](#despliegue-en-azure)).
 
 ---
 
@@ -64,7 +66,7 @@ Este repo es solo el backend (API REST). El frontend vive en [GeoKaia-Frontend](
 |---|---|---|
 | Node.js | 20.x | Entorno de ejecución del servidor |
 | Express.js | 5.x | Framework de la API REST |
-| PostgreSQL | 15+ | Base de datos relacional, alojada en Neon (serverless) |
+| PostgreSQL | 15+ | Base de datos relacional, en un contenedor Docker junto a la app |
 | Prisma ORM | 7.8 | Modelado de datos y acceso a la base (vía `@prisma/adapter-pg`) |
 | Zod | 4.x | Validación de esquemas en cada endpoint de escritura |
 | JWT (jsonwebtoken) | 9.x | Autenticación de negocios, sesión válida por 8 horas |
@@ -73,16 +75,21 @@ Este repo es solo el backend (API REST). El frontend vive en [GeoKaia-Frontend](
 | Groq SDK (`openai/gpt-oss-20b`) | — | Agente de IA que recomienda rutas existentes según lo que pide el turista |
 | Helmet | 8.x | Cabeceras HTTP de seguridad |
 | express-rate-limit | 8.x | Límite de peticiones (fuerza bruta y DoS a nivel de aplicación) |
+| Docker + Docker Compose | — | Contenedores del backend, frontend, base de datos y Nginx |
+| Nginx | stable | Proxy inverso con HTTPS (Let's Encrypt); el código nunca se expone directo |
 
 ---
 
 ## Instalación
 
+Esta sección es para desarrollo local. Para el servidor de Azure, ver [Despliegue en Azure](#despliegue-en-azure).
+
 **Requisitos previos:**
 
 - Node.js >= 18
 - Git
-- Cuenta activa en [Neon](https://neon.tech) (PostgreSQL) y en [Groq](https://groq.com) (API Key)
+- PostgreSQL 15+ (instalado, o en un contenedor: `docker run -d --name geokaia-db -e POSTGRES_PASSWORD=clave -e POSTGRES_DB=geokaia -p 5432:5432 postgres:17-alpine`)
+- Cuenta activa en [Groq](https://groq.com) (API Key)
 
 ```bash
 # 1. Clona el repositorio
@@ -113,29 +120,34 @@ npm run dev
 
 Levanta el servidor con `nodemon` en `http://localhost:4000` (o el puerto que definas en `PORT`), reiniciando automáticamente ante cualquier cambio en `src/`.
 
-En producción, el proceso se levanta con `node src/index.js` — actualmente deployado en [Render](https://render.com) (plan gratuito, por lo que el primer request tras inactividad puede tardar ~30s en responder mientras el servicio "despierta").
+En producción, el proceso se levanta con `node src/index.js` dentro de un contenedor Docker, en una VM de Azure y detrás de Nginx. Los contenedores se reinician solos (`restart: unless-stopped`). Ver [Despliegue en Azure](#despliegue-en-azure).
 
 ---
 
 ## Arquitectura del sistema
 
 ```
-[ Interfaz de Usuario / Frontend en Next.js — repo GeoKaia-Frontend ]
-  |-- Componentes reutilizables (PlaceCard, RouteCard)
-  |-- Módulo de mapa (MapTiler + react-leaflet)
-  |-- Visor 360° inmersivo (Pannellum)
-  |-- Interfaz de IA conversacional (Kaia)
-            |
-            | Peticiones HTTP / JSON (fetch)
-            v
-[ Enrutamiento y seguridad — Express, este repo ]
-  |-- helmet (cabeceras) + CORS con lista de orígenes + límite de peticiones por IP
-  |-- parseo de JSON con tope de 50 kb
-  |-- authMiddleware (valida JWT) / adminMiddleware (valida rol admin)
-  |-- validate.middleware (valida el body contra un schema de Zod y entrega solo lo validado)
-  |-- limites.middleware (rate limiting por recurso) · validarId.middleware (:id entero)
-            |
-            v
+[ Navegador ]
+      |  HTTPS
+      v
+[ Nginx — proxy inverso, certificado Let's Encrypt, único servicio con puertos públicos ]
+      |
+      |-- /      -> [ Interfaz de Usuario / Frontend en Next.js — repo GeoKaia-Frontend ]
+      |               |-- Componentes reutilizables (PlaceCard, RouteCard)
+      |               |-- Módulo de mapa (MapTiler + react-leaflet)
+      |               |-- Visor 360° inmersivo (Pannellum)
+      |               |-- Interfaz de IA conversacional (Kaia)
+      |                         |
+      |                         | Peticiones HTTP / JSON (fetch a /api)
+      |                         v
+      |-- /api/  -> [ Enrutamiento y seguridad — Express, este repo ]
+                 |-- helmet (cabeceras) + CORS con lista de orígenes + límite de peticiones por IP
+                 |-- parseo de JSON con tope de 50 kb
+                 |-- authMiddleware (valida JWT) / adminMiddleware (valida rol admin)
+                 |-- validate.middleware (valida el body contra un schema de Zod y entrega solo lo validado)
+                 |-- limites.middleware (rate limiting por recurso) · validarId.middleware (:id entero)
+                 |
+                 v
 [ Controladores — lógica de negocio por entidad ]
   auth · lugares · rutas · ia · leads
             |
@@ -144,7 +156,7 @@ En producción, el proceso se levanta con `node src/index.js` — actualmente de
 [ Prisma ORM (adapter-pg) ]
             |
             v
-[ PostgreSQL en Neon — esquema relacional 3FN ]
+[ PostgreSQL en contenedor Docker (red interna, sin puertos públicos) — esquema relacional 3FN ]
   Negocio · Lugar · Ruta · ParadaRuta · Lead
 ```
 
@@ -152,6 +164,7 @@ En producción, el proceso se levanta con `node src/index.js` — actualmente de
 - **Sin subida de archivos**: fotos, video, audio y visor 360° se guardan como URLs (`fotoUrl`, `videoUrl`, `audioUrl`, `panoramaUrl`), no como binarios en el servidor — evita infraestructura de storage y mantiene el backend liviano.
 - **Contenido curado vs. contenido de negocio**: un negocio solo puede crear/editar su propio `Lugar` (queda `PENDIENTE` hasta que un admin lo aprueba). Las `Ruta` las arma un admin a partir de lugares ya aprobados — no hay flujo para que un negocio cree una ruta.
 - **2FA obligatorio**: todo negocio que se registra recibe un secret TOTP (QR para Google Authenticator); el login no entrega el JWT hasta verificar el código de 6 dígitos.
+- **Un solo punto de entrada**: solo Nginx publica puertos (80 y 443). El backend, el frontend y la base de datos viven en una red interna de Docker y no son alcanzables desde internet.
 
 ---
 
@@ -178,15 +191,22 @@ En producción, el proceso se levanta con `node src/index.js` — actualmente de
 
 ## Variables de entorno
 
-Copiá `.env.example` a `.env` y completá:
+Para desarrollo local, copiá `.env.example` a `.env` y completá. Para el servidor, las variables viven en `deploy/.env` (plantilla en `deploy/.env.example`, ver [Despliegue en Azure](#despliegue-en-azure)). Ningún `.env` se sube a GitHub.
 
 | Variable | Obligatoria | Descripción |
 |---|---|---|
-| `DATABASE_URL` | Sí | Connection string de PostgreSQL (Neon). Formato `postgresql://usuario:password@host/db?sslmode=require` |
+| `DATABASE_URL` | Sí | Connection string de PostgreSQL. Formato `postgresql://usuario:password@host:5432/db`. En Docker el host es `db` (el nombre del servicio) |
 | `JWT_SECRET` | Sí | Secreto usado para firmar y verificar los JWT de sesión |
 | `GROQ_API_KEY` | Sí | API Key de Groq, usada por el agente de recomendación de rutas |
 | `PORT` | No | Puerto del servidor. Default `4000` si no se define |
-| `CORS_ORIGINS` | No | Orígenes del navegador autorizados a llamar a la API, separados por coma. Se suman a los dominios del frontend (`geokaia.vercel.app` y `geo-kaia-frontend.vercel.app`); `localhost` siempre se permite para desarrollo |
+| `CORS_ORIGINS` | No | Orígenes del navegador autorizados a llamar a la API, separados por coma. Se suman a los dominios del frontend definidos por defecto en el código; `localhost` siempre se permite para desarrollo. En Azure: `https://geokaia.northcentralus.cloudapp.azure.com` |
+
+Variables adicionales que usa solo `deploy/.env` (Docker Compose):
+
+| Variable | Descripción |
+|---|---|
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | Credenciales con las que se crea la base de datos del contenedor |
+| `NEXT_PUBLIC_API_URL` | URL pública que usa el frontend para llamar a la API, **sin** `/api`. Se fija al compilar el frontend |
 
 ---
 
@@ -216,13 +236,19 @@ prisma/
 └── migrations/                  # Historial de migraciones versionadas
 scripts/
 └── set-admin-password.js        # Utilidad para promover una cuenta a esAdmin=true
+Dockerfile                       # Imagen del backend (Node 20, usuario sin privilegios)
+.dockerignore                    # Excluye node_modules, .env y .git de la imagen
+deploy/                          # Configuración del servidor
+├── docker-compose.yml           # Base de datos, backend, frontend y Nginx
+├── nginx.conf                   # Proxy inverso, HTTPS y compresión gzip
+└── .env.example                 # Plantilla de variables (sin valores secretos)
 ```
 
 ---
 
 ## Endpoints de la API
 
-Base URL: `https://geokaia-backend.onrender.com` (o `http://localhost:4000` en local).
+Base URL: `https://geokaia.northcentralus.cloudapp.azure.com` (o `http://localhost:4000` en local). Todas las rutas empiezan con `/api`.
 🔓 público · 🔒 requiere JWT de negocio · 👑 requiere JWT de una cuenta con `esAdmin: true`
 
 ### Auth — `/api/auth`
@@ -273,17 +299,17 @@ Base URL: `https://geokaia-backend.onrender.com` (o `http://localhost:4000` en l
 Registrar un negocio y ver el catálogo público de lugares:
 
 ```bash
-curl -X POST https://geokaia-backend.onrender.com/api/auth/registrar \
+curl -X POST https://geokaia.northcentralus.cloudapp.azure.com/api/auth/registrar \
   -H "Content-Type: application/json" \
   -d '{"email":"minegocio@correo.com","password":"minimo6caracteres","nombreContacto":"Nombre Apellido","whatsapp":"+50588888888"}'
 
-curl https://geokaia-backend.onrender.com/api/lugares
+curl https://geokaia.northcentralus.cloudapp.azure.com/api/lugares
 ```
 
 Pedirle a Kaia una recomendación:
 
 ```bash
-curl -X POST https://geokaia-backend.onrender.com/api/ia/recomendar-ruta \
+curl -X POST https://geokaia.northcentralus.cloudapp.azure.com/api/ia/recomendar-ruta \
   -H "Content-Type: application/json" \
   -d '{"consulta":"quiero ver volcanes y comer algo típico"}'
 ```
@@ -291,7 +317,7 @@ curl -X POST https://geokaia-backend.onrender.com/api/ia/recomendar-ruta \
 Editar el contenido del lugar propio (requiere el JWT obtenido tras `/verificar-2fa`):
 
 ```bash
-curl -X PATCH https://geokaia-backend.onrender.com/api/lugares/mi-lugar \
+curl -X PATCH https://geokaia.northcentralus.cloudapp.azure.com/api/lugares/mi-lugar \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <TOKEN>" \
   -d '{"descripcion":"Nueva descripción del lugar con al menos diez caracteres"}'
@@ -308,15 +334,82 @@ La API se protege en capas. Cada una corresponde a un tipo de ataque habitual:
 | **Inyección SQL** | No hay SQL escrito a mano: todo el acceso a datos pasa por Prisma, que envía los valores como parámetros de una consulta preparada (nunca concatenados al texto SQL). Además no se usa `$queryRaw`/`$executeRaw`. Aun así cada entrada se valida antes de llegar al ORM. |
 | **Datos mal formados / mass assignment** | Todo endpoint con cuerpo pasa por un schema de Zod (`validate.middleware.js`): tipos, largos máximos, rangos de coordenadas, enums de categoría y formato del código 2FA. El body validado **reemplaza** al original, así que los campos que no declara el schema se descartan. Los `:id` se validan como enteros (`validarId.middleware.js`). |
 | **XSS almacenado** | Los links que carga un negocio solo se aceptan si son `http://` o `https://` (`utils/validarUrls.js`): `z.string().url()` por sí solo deja pasar `javascript:`. Mapas, Waze y foto se verifican además por dominio/extensión. El frontend repite la comprobación al mostrarlos. |
-| **Fuerza bruta (login y 2FA)** | `express-rate-limit`: 20 intentos fallidos de login por IP cada 15 min; el código 2FA tiene tope por IP (30) **y por cuenta** (8) cada 15 min, porque son solo 10⁶ combinaciones. Login con el mismo mensaje para "correo inexistente" y "contraseña incorrecta" y con comparación bcrypt en ambos casos (sin enumeración de usuarios). |
-| **DoS a nivel de aplicación** | Tope general de 600 peticiones por IP cada 15 min, tope propio para registro, formulario de contacto y chat de IA (20/min, cada consulta cuesta una llamada a Groq), cuerpo máximo de 50 kb, contraseña máxima de 72 caracteres (bcrypt) y timeout de 30 s por petición contra conexiones lentas. Los límites son en memoria: sirven para una instancia; con varias habría que moverlos a Redis. Un ataque volumétrico de red lo absorbe la infraestructura de Render y Vercel, no este código. |
+| **Fuerza bruta (login y 2FA)** | `express-rate-limit`: 20 intentos fallidos de login por IP cada 15 min; el código 2FA tiene tope por IP (30) **y por cuenta** (8) cada 15 min, porque son solo 10⁶ combinaciones. Login con el mismo mensaje para "correo inexistente" y "contraseña incorrecta" y con comparación bcrypt en ambos casos (sin enumeración de usuarios). Como la API está detrás de Nginx, Express confía en un proxy (`trust proxy`) para contar la IP real del visitante y no la del proxy. |
+| **DoS a nivel de aplicación** | Tope general de 600 peticiones por IP cada 15 min, tope propio para registro, formulario de contacto y chat de IA (20/min, cada consulta cuesta una llamada a Groq), cuerpo máximo de 50 kb, contraseña máxima de 72 caracteres (bcrypt) y timeout de 30 s por petición contra conexiones lentas. Los límites son en memoria: sirven para una instancia; con varias habría que moverlos a Redis. Un ataque volumétrico de red lo absorbe la infraestructura de Azure, no este código. |
 | **Fuga de información** | Los errores 500 devuelven un mensaje genérico (el detalle queda en el log). `GET /api/lugares/:id` ya no incluye al negocio dueño y solo devuelve lugares aprobados. Rutas inexistentes y JSON inválido responden 404/400 sin trazas. |
 | **Acceso no autorizado** | `authMiddleware` exige un JWT válido (algoritmo HS256 fijado); `adminMiddleware` re-consulta en la base que la cuenta tenga `esAdmin: true` (no confía en el contenido del token). El registro público no puede crear administradores. |
 | **Orígenes no autorizados** | CORS con lista de orígenes (`CORS_ORIGINS`); `helmet` agrega HSTS, `nosniff` y demás cabeceras de seguridad. |
 | **Robo de credenciales** | Contraseñas con `bcrypt`; autenticación en dos factores TOTP (`speakeasy`) obligatoria; el JWT vence a las 8 horas. |
 | **Manipulación de la IA** | La consulta del turista tiene tope de 500 caracteres y la respuesta del modelo se filtra: solo se devuelven rutas que existen en el catálogo, con textos de largo acotado. |
+| **Exposición del servidor** | HTTPS obligatorio (redirección de HTTP a HTTPS con certificado Let's Encrypt). Solo Nginx publica puertos; la base de datos, el backend y el frontend quedan en una red interna de Docker. Los secretos viven en `deploy/.env` (permisos `600`), fuera de GitHub y fuera de las imágenes. El backend corre con un usuario sin privilegios (`node`), no como root. |
 
 **Limitaciones conocidas:** el paso de 2FA recibe el `negocioId` que devuelve el login, no un token temporal firmado (el límite por cuenta mitiga el abuso, pero un token de "paso 1" sería lo ideal); los límites de peticiones son por instancia; y no hay una suite de pruebas automatizadas, por lo que las defensas se verificaron manualmente con peticiones de ataque contra la API.
+
+---
+
+## Despliegue en Azure
+
+La app corre en una VM de Azure (Ubuntu 24.04) con Docker Compose: PostgreSQL, backend, frontend y Nginx como proxy inverso con HTTPS. Solo Nginx publica puertos (80 y 443); el resto queda en una red interna.
+
+**URL:** https://geokaia.northcentralus.cloudapp.azure.com
+
+La carpeta [`deploy/`](deploy/) de este repositorio contiene la configuración del servidor. El frontend vive en [GeoKaia-Frontend](https://github.com/GeoKaia/GeoKaia-Frontend).
+
+### Estructura esperada en la VM
+
+```
+~/geokaia/
+├── GeoKaia-Backend/    (este repositorio, rama main)
+├── GeoKaia-Frontend/   (repositorio del frontend, rama main)
+└── deploy/             (copia de la carpeta deploy/ de este repositorio)
+```
+
+### Instalación desde cero
+
+1. Instalar Docker y Docker Compose en la VM.
+2. Clonar los dos repositorios dentro de `~/geokaia/` y copiar `GeoKaia-Backend/deploy/` a `~/geokaia/deploy/`.
+3. Crear `~/geokaia/deploy/.env` a partir de `.env.example` y completar los valores (`chmod 600 .env`). Nunca se sube a GitHub.
+4. Obtener el certificado HTTPS (con el puerto 80 libre):
+   `sudo certbot certonly --standalone -d geokaia.northcentralus.cloudapp.azure.com`
+5. Levantar todo:
+   ```bash
+   cd ~/geokaia/deploy
+   docker compose up -d --build
+   docker compose run --rm backend npx prisma migrate deploy
+   docker compose ps
+   ```
+
+### Variables de entorno
+
+La lista completa está en [Variables de entorno](#variables-de-entorno) y la plantilla en `deploy/.env.example`.
+
+### Actualizar a la última versión de `main`
+
+```bash
+cd ~/geokaia/GeoKaia-Backend  && git checkout main && git pull origin main
+cd ~/geokaia/GeoKaia-Frontend && git checkout main && git pull origin main
+cd ~/geokaia/deploy
+docker compose up -d --build
+docker compose run --rm backend npx prisma migrate deploy
+docker compose exec -T nginx nginx -s reload
+```
+
+### Verificar que la VM coincide con `main`
+
+```bash
+cd ~/geokaia/GeoKaia-Backend  && git fetch && git status -sb && git rev-parse HEAD origin/main
+cd ~/geokaia/GeoKaia-Frontend && git fetch && git status -sb && git rev-parse HEAD origin/main
+```
+
+Los dos hashes de cada repositorio deben coincidir y el árbol debe estar limpio.
+
+### Comprobaciones rápidas
+
+```bash
+cd ~/geokaia/deploy && docker compose ps                 # 4 contenedores en ejecución
+curl -sI https://geokaia.northcentralus.cloudapp.azure.com | head -1   # HTTP/2 200
+curl -sI http://geokaia.northcentralus.cloudapp.azure.com | head -1    # redirige a HTTPS (301)
+```
 
 ---
 
