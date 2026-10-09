@@ -324,6 +324,19 @@ curl -X PATCH https://geokaia-backend.onrender.com/api/lugares/mi-lugar \
 
 ---
 
+## Staging local (probar la rama `staging` sin tocar producción)
+
+```bash
+npm install
+npm run staging:local
+```
+
+Un solo comando levanta: una **base PostgreSQL propia** (datos en `.staging/`, ignorada por git), aplica las migraciones **solo sobre esa base local**, crea la primera vez tres cuentas de prueba (administrador, responsable y negocio) y arranca el backend en `http://localhost:4000`. Las contraseñas y el secreto de Google Authenticator de esas cuentas quedan en `.staging/credenciales.txt` (no se suben a git). Los correos (restablecer contraseña, avisos) no se envían: se anexan a `.staging/correos.jsonl` para abrir los enlaces desde ahí.
+
+Para que el frontend use este backend: en `GeoKaia-Frontend/.env.local` poné `BACKEND_URL=http://localhost:4000` y reiniciá `npm run dev`. `Ctrl+C` detiene todo; los datos se conservan. Para empezar de cero, borrá la carpeta `.staging/`. Variables opcionales: `STAGING_API_PORT`, `STAGING_DB_PORT`, `STAGING_FRONTEND_URL`.
+
+> Nunca apuntes `DATABASE_URL` de producción a una rama que cambie el esquema sin antes aplicar y probar las migraciones en una base de staging.
+
 ## Roles y permisos (RBAC)
 
 Toda decisión de acceso se toma **en el servidor, en cada petición** (`src/rbac/permisos.js`). El rol sale de la base de datos junto con la sesión (`esAdmin`, `esResponsable`), nunca del navegador: ocultar botones no protege nada y aquí no se confía en ellos.

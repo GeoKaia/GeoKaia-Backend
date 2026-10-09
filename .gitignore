@@ -3,3 +3,5 @@ node_modules
 .env
 
 /generated/prisma
+# Datos del staging local (base propia, credenciales de prueba y correos simulados)
+.staging/
