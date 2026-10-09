@@ -45,6 +45,8 @@ const registrarSchema = z.object({
 router.post('/registrar', limiteRegistro, validate(registrarSchema), authController.registrar);
 router.post('/login', limiteLogin, validate(loginSchema), authController.login);
 router.post('/verificar-2fa', limite2FAPorIp, limite2FAPorCuenta, validate(verificar2FASchema), authController.verificar2FA);
+router.get('/me', authMiddleware, authController.me);
+router.post('/logout', authController.logout);
 router.delete('/cuenta', authMiddleware, validate(eliminarCuentaSchema), authController.eliminarCuenta);
 
 module.exports = router;

@@ -1,8 +1,9 @@
 const jwt = require('jsonwebtoken');
+const { leerToken } = require('../utils/sesion');
 
 module.exports = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  // El token viaja solo en la cookie httpOnly (ver utils/sesion.js): ya no se acepta por cabecera.
+  const token = leerToken(req);
 
   if (!token) {
     return res.status(401).json({ error: 'Token requerido' });

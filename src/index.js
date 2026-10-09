@@ -17,7 +17,10 @@ const PORT = process.env.PORT || 4000;
 // 2. Middlewares Globales
 // Render pone un proxy delante del servidor: sin esto req.ip sería siempre la IP del proxy y el límite de
 // peticiones contaría a todos los visitantes como una sola persona.
-app.set('trust proxy', 1);
+// TRUST_PROXY_HOPS: cuántos proxies hay delante (1 = solo Render). Si el frontend reenvía /api con rewrites (Vercel)
+// o hay Nginx delante, la IP real del visitante queda un salto más atrás: poné 2. Con un número de más, quien
+// llame directo podría falsear su IP en X-Forwarded-For: no lo subas si no hay tantos proxies reales.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS) || 1);
 
 // Cabeceras de seguridad estándar (HSTS, nosniff, sin X-Powered-By, etc.).
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
@@ -37,9 +40,23 @@ const esOrigenLocal = (origen) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 app.use(
   cors({
     origin: (origen, cb) => cb(null, !origen || ORIGENES_PERMITIDOS.includes(origen) || esOrigenLocal(origen)),
+    // La sesión viaja en una cookie: sin credentials el navegador no la manda ni la guarda en peticiones cross-origin.
+    credentials: true,
     maxAge: 600,
   })
 );
+
+// CSRF: como la sesión es una cookie, una página ajena podría intentar mandar un POST/PATCH/DELETE en nombre
+// de quien tiene la sesión abierta. SameSite=Lax ya lo frena en los navegadores modernos; esta es la segunda
+// barrera: si la petición que escribe datos trae un Origin, tiene que ser uno permitido.
+app.use((req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const origen = req.headers.origin;
+  if (origen && !(ORIGENES_PERMITIDOS.includes(origen) || esOrigenLocal(origen))) {
+    return res.status(403).json({ error: 'Origen no permitido' });
+  }
+  next();
+});
 
 // Tope de peticiones por IP (DoS a nivel de aplicación) y de tamaño del cuerpo.
 app.use(limiteGeneral);
