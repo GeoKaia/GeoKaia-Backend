@@ -3,6 +3,7 @@ const { responderError } = require('../utils/errores');
 const jwt = require('jsonwebtoken');
 const { fijarCookie, borrarCookie } = require('../utils/sesion');
 const { emitirRefresco, revocarRefresco } = require('../utils/refresco');
+const auditoria = require('../services/auditoria');
 const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
 const { TERMINOS_VERSION } = require('../config/legal');
@@ -42,6 +43,7 @@ exports.registrar = async (req, res) => {
         terminosVersion: TERMINOS_VERSION,
       },
     });
+    await auditoria.registrar({ req, actor: { id: negocio.id, email: negocio.email }, accion: 'cuenta.registro', recurso: { tipo: 'Negocio', id: negocio.id }, negocioAfectadoId: negocio.id });
     const qrUrl = await qrcode.toDataURL(secret.otpauth_url);
     res.json({
       mensaje: 'Negocio registrado. Escaneá el QR con Google Authenticator.',
@@ -63,7 +65,11 @@ exports.login = async (req, res) => {
     const valida = await bcrypt.compare(password, negocio?.passwordHash ?? HASH_RELLENO);
     // Un solo mensaje y un solo código para "no existe" y "contraseña incorrecta": responder distinto
     // permitiría averiguar qué correos tienen cuenta.
-    if (!negocio || !valida) return res.status(401).json({ error: 'Correo o contraseña incorrectos' });
+    if (!negocio || !valida) {
+      // En el historial sí se distingue el motivo (solo lo ve un administrador); al cliente no.
+      await auditoria.registrar({ req, actor: null, accion: 'sesion.login_fallido', resultado: 'FALLO', negocioAfectadoId: negocio?.id ?? null, detalle: { email, motivo: negocio ? 'password' : 'cuenta_inexistente' } });
+      return res.status(401).json({ error: 'Correo o contraseña incorrectos' });
+    }
     res.json({ mensaje: 'Contraseña válida. Ingresá tu código 2FA.', negocioId: negocio.id });
   } catch (err) {
     responderError(res, err);
@@ -96,6 +102,7 @@ exports.eliminarCuenta = async (req, res) => {
       }
     });
 
+    await auditoria.registrar({ req, accion: 'cuenta.eliminar', recurso: { tipo: 'Negocio', id: negocio.id }, negocioAfectadoId: negocio.id });
     borrarCookie(res);
     res.json({ mensaje: 'Cuenta eliminada correctamente' });
   } catch (err) {
@@ -114,7 +121,10 @@ exports.verificar2FA = async (req, res) => {
       token,
       window: 1,
     });
-    if (!valido) return res.status(401).json({ error: 'Código 2FA incorrecto' });
+    if (!valido) {
+      await auditoria.registrar({ req, actor: { id: negocio.id, email: negocio.email, esAdmin: negocio.esAdmin }, accion: 'sesion.2fa_fallido', resultado: 'FALLO', negocioAfectadoId: negocio.id });
+      return res.status(401).json({ error: 'Código 2FA incorrecto' });
+    }
     const jwtToken = jwt.sign(
       { id: negocio.id, email: negocio.email },
       process.env.JWT_SECRET,
@@ -124,6 +134,7 @@ exports.verificar2FA = async (req, res) => {
     fijarCookie(res, jwtToken);
     // Segunda cookie, de dispositivo (7 días): si alguien borra solo la de acceso desde F12, la sesión se renueva sola.
     await emitirRefresco(res, negocio.id);
+    await auditoria.registrar({ req, actor: { id: negocio.id, email: negocio.email, esAdmin: negocio.esAdmin }, accion: 'sesion.login', negocioAfectadoId: negocio.id });
     res.json({ mensaje: 'Sesión iniciada', esAdmin: negocio.esAdmin });
   } catch (err) {
     responderError(res, err);

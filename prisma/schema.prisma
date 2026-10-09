@@ -141,3 +141,28 @@ model SesionRefresco {
 
   @@index([negocioId])
 }
+
+// Historial de auditoría: solo se anexa. La migración instala triggers que rechazan UPDATE, DELETE y TRUNCATE, y
+// cada fila encadena el hash de la anterior (ver src/services/auditoria.js). A propósito NO tiene claves foráneas:
+// el historial debe sobrevivir al borrado de la cuenta o del negocio al que se refiere.
+model Auditoria {
+  id                Int      @id @default(autoincrement())
+  creadaEn          DateTime @default(now())
+  actorId           Int?
+  actorEmail        String?
+  actorRol          String? // ADMIN | PROPIETARIO | ANONIMO
+  accion            String // "dominio.accion", por ejemplo sesion.login_fallido
+  recursoTipo       String?
+  recursoId         String?
+  negocioAfectadoId Int?
+  resultado         String // OK | DENEGADO | FALLO
+  ip                String?
+  userAgent         String?
+  detalle           Json?
+  hashPrevio        String?
+  hash              String
+
+  @@index([accion, creadaEn])
+  @@index([actorId])
+  @@index([negocioAfectadoId])
+}
