@@ -17,7 +17,10 @@ const PORT = process.env.PORT || 4000;
 // 2. Middlewares Globales
 // Render pone un proxy delante del servidor: sin esto req.ip sería siempre la IP del proxy y el límite de
 // peticiones contaría a todos los visitantes como una sola persona.
-app.set('trust proxy', 1);
+// TRUST_PROXY_HOPS: cuántos proxies hay delante (1 = solo Render). Si el frontend reenvía /api con rewrites (Vercel)
+// o hay Nginx delante, la IP real del visitante queda un salto más atrás: poné 2. Con un número de más, quien
+// llame directo podría falsear su IP en X-Forwarded-For: no lo subas si no hay tantos proxies reales.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS) || 1);
 
 // Cabeceras de seguridad estándar (HSTS, nosniff, sin X-Powered-By, etc.).
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
