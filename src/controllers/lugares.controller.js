@@ -217,7 +217,7 @@ exports.obtenerPendientes = async (req, res) => {
     const lugares = await prisma.lugar.findMany({
       where: { estado: 'PENDIENTE' },
       include: {
-        negocio: { select: { email: true, nombreContacto: true, whatsapp: true } },
+        negocio: { select: { nombreContacto: true } }, // sin correo ni WhatsApp: el contacto es por conversaciones
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -227,154 +227,42 @@ exports.obtenerPendientes = async (req, res) => {
   }
 };
 
-// 8. [Admin] Aprobar o rechazar un lugar
+// 8. [Admin] Aprobar o rechazar un lugar RECIÉN ENVIADO (estado PENDIENTE). Un lugar ya publicado no se puede ocultar ni
+// mostrar desde aquí: eso es una excepción y requiere un escalamiento autorizado por un responsable.
 exports.actualizarEstado = async (req, res) => {
   try {
     const { estado } = req.body;
-    if (!['APROBADO', 'RECHAZADO', 'PENDIENTE'].includes(estado)) {
-      return res.status(400).json({ error: 'Estado inválido' });
+    const id = parseInt(req.params.id);
+    const actual = await prisma.lugar.findUnique({ where: { id }, select: { id: true, estado: true } });
+    if (!actual) return res.status(404).json({ error: 'Lugar no encontrado' });
+    if (actual.estado !== 'PENDIENTE') {
+      return res.status(409).json({ error: 'Solo se puede aprobar o rechazar un lugar pendiente. Para cambiar la visibilidad de un lugar ya revisado hay que pedir un escalamiento.' });
     }
 
-    const lugar = await prisma.lugar.update({
-      where: { id: parseInt(req.params.id) },
-      data: { estado },
-    });
-
-    await auditoria.registrar({ req, accion: 'lugar.estado', recurso: { tipo: 'Lugar', id: lugar.id }, lugarId: lugar.id, detalle: { estado } });
+    const lugar = await prisma.lugar.update({ where: { id }, data: { estado } });
+    await auditoria.registrar({ req, accion: 'lugar.estado', recurso: { tipo: 'Lugar', id: lugar.id }, lugarId: lugar.id, detalle: { de: 'PENDIENTE', a: estado } });
     res.json({ mensaje: `Lugar marcado como ${estado}`, lugar });
   } catch (error) {
     responderError(res, error, 'Error al actualizar el estado');
   }
 };
 
-// --- Acceso amplio de admin a TODOS los lugares (cualquier negocio, cualquier estado) ---
-// Pedido puntual para acelerar la carga de contenido antes de la entrega final: crear una
-// cuenta de negocio + pasar por el 2FA por cada lugar real es demasiado lento. Este bloque
-// le permite al admin ver/editar/borrar cualquier lugar sin ser su dueño, lo cual normalmente
-// no seria correcto (rompe el modelo de "cada negocio administra lo suyo"). Evaluar si conviene
-// restringir o quitar este acceso despues de la entrega.
+// --- Supervisión (solo lectura) ---
+// Los administradores pueden VER todos los lugares para supervisar la plataforma, pero no existe ninguna operación para que
+// un administrador cree, edite ni borre el lugar de otro negocio (principio de mínimo privilegio y de propiedad de la
+// información). Para pedir cambios se abre una conversación con el negocio.
 
 // 9. [Admin] Listar TODOS los lugares, sin filtrar por estado ni por dueño
 exports.obtenerTodosAdmin = async (req, res) => {
   try {
     const lugares = await prisma.lugar.findMany({
       include: {
-        negocio: { select: { email: true, nombreContacto: true, whatsapp: true } },
+        negocio: { select: { nombreContacto: true } }, // sin correo ni WhatsApp: el contacto es por conversaciones
       },
       orderBy: { createdAt: 'desc' },
     });
     res.json(lugares);
   } catch (error) {
     responderError(res, error, 'Error al obtener los lugares');
-  }
-};
-
-// 10. [Admin] Editar cualquier lugar, sea o no el suyo, sin las restricciones de tier
-exports.actualizarLugarAdmin = async (req, res) => {
-  try {
-    const lugarId = parseInt(req.params.id);
-    const lugarExistente = await prisma.lugar.findUnique({ where: { id: lugarId } });
-    if (!lugarExistente) return res.status(404).json({ error: 'Lugar no encontrado' });
-
-    // Mismo whitelist que actualizarMiLugar, mas 'estado' (el admin puede aprobar/corregir en el mismo paso)
-    // y sin el filtro de campos premium por tier: el admin puede cargar cualquier campo sin importar
-    // el tier del negocio dueño.
-    const { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, mapsUrl, wazeUrl, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl, estado } = req.body;
-
-    const lugarActualizado = await prisma.lugar.update({
-      where: { id: lugarId },
-      data: { nombre, categoria, latitud, longitud, descripcion, subcategoria, horarios, mapsUrl, wazeUrl, fotoUrl, panoramaUrl, videoUrl, galeriaUrls, whatsapp, menuUrl, audioUrl, estado },
-    });
-
-    await auditoria.registrar({ req, accion: 'lugar.editar_admin', recurso: { tipo: 'Lugar', id: lugarId }, lugarId, detalle: { campos: Object.keys(req.body || {}) } });
-    res.json({ mensaje: 'Lugar actualizado exitosamente', lugar: lugarActualizado });
-  } catch (error) {
-    responderError(res, error, 'Error al actualizar el lugar');
-  }
-};
-
-// 11. [Admin] Borrar cualquier lugar sin pedir contraseña (no es el dueño, es una accion administrativa)
-exports.eliminarLugarAdmin = async (req, res) => {
-  try {
-    const lugarId = parseInt(req.params.id);
-    const lugarExistente = await prisma.lugar.findUnique({ where: { id: lugarId } });
-    if (!lugarExistente) return res.status(404).json({ error: 'Lugar no encontrado' });
-
-    // Mismo orden de desvinculacion de FK que eliminarMiLugar, pero sin $transaction
-    // (este entorno bloquea transacciones con varios deletes seguidos por Bash; en el
-    // servidor corriendo normalmente no hay ese problema, pero mantenemos el mismo
-    // orden de pasos por consistencia y para que sea facil de auditar).
-    const duenoId = (await prisma.negocio.findUnique({ where: { lugarId }, select: { id: true } }))?.id ?? null;
-    await prisma.paradaRuta.deleteMany({ where: { lugarId } });
-    await prisma.negocio.updateMany({ where: { lugarId }, data: { lugarId: null } });
-    await prisma.lugar.delete({ where: { id: lugarId } });
-
-    res.json({ mensaje: 'Lugar eliminado correctamente' });
-  } catch (error) {
-    responderError(res, error, 'Error al eliminar el lugar');
-  }
-};
-
-// --- Comentarios del equipo hacia los negocios ---
-// En vez de editar el lugar de otra persona (ver nota arriba y ADMIN_EDICION_LUGARES en las rutas), el admin
-// le deja una nota al negocio y es el negocio quien corrige lo suyo.
-
-// 12. [Admin] Dejar un comentario en un lugar
-exports.crearComentarioAdmin = async (req, res) => {
-  try {
-    const lugarId = parseInt(req.params.id);
-    const lugar = await prisma.lugar.findUnique({ where: { id: lugarId } });
-    if (!lugar) return res.status(404).json({ error: 'Lugar no encontrado' });
-
-    const comentario = await prisma.comentarioAdmin.create({
-      data: { lugarId, autorEmail: req.negocio.email, texto: req.body.texto.trim() },
-    });
-    await auditoria.registrar({ req, accion: 'comentario.crear', recurso: { tipo: 'Lugar', id: lugarId }, lugarId });
-    res.status(201).json({ mensaje: 'Comentario guardado', comentario });
-  } catch (error) {
-    responderError(res, error, 'Error al guardar el comentario');
-  }
-};
-
-// 13. [Admin] Ver los comentarios de un lugar
-exports.listarComentariosAdmin = async (req, res) => {
-  try {
-    const comentarios = await prisma.comentarioAdmin.findMany({
-      where: { lugarId: parseInt(req.params.id) },
-      orderBy: { createdAt: 'desc' },
-    });
-    res.json(comentarios);
-  } catch (error) {
-    responderError(res, error, 'Error al obtener los comentarios');
-  }
-};
-
-// 14. [Admin] Borrar un comentario
-exports.eliminarComentarioAdmin = async (req, res) => {
-  try {
-    const id = Number(req.params.comentarioId);
-    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'ID inválido' });
-    const existente = await prisma.comentarioAdmin.findUnique({ where: { id } });
-    if (!existente) return res.status(404).json({ error: 'Comentario no encontrado' });
-    await prisma.comentarioAdmin.delete({ where: { id } });
-    res.json({ mensaje: 'Comentario eliminado' });
-  } catch (error) {
-    responderError(res, error, 'Error al eliminar el comentario');
-  }
-};
-
-// 15. [Negocio] Ver los comentarios que el equipo dejó en MI lugar (solo lectura)
-exports.obtenerMisComentarios = async (req, res) => {
-  try {
-    const negocio = await prisma.negocio.findUnique({ where: { id: req.negocio.id } });
-    if (!negocio?.lugarId) return res.json([]);
-    const comentarios = await prisma.comentarioAdmin.findMany({
-      where: { lugarId: negocio.lugarId },
-      select: { id: true, texto: true, createdAt: true }, // el correo del admin no se le muestra al negocio
-      orderBy: { createdAt: 'desc' },
-    });
-    res.json(comentarios);
-  } catch (error) {
-    responderError(res, error, 'Error al obtener los comentarios');
   }
 };

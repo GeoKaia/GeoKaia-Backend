@@ -27,7 +27,22 @@ function puertoLibre() {
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// En Windows, al detener un PostgreSQL embebido puede quedar un proceso hijo huérfano que bloquea el arranque del siguiente.
+// Se cierran los procesos de embedded-postgres cuyo proceso padre ya no existe (nunca los de otra instalación de PostgreSQL).
+function limpiarPostgresHuerfanos() {
+  if (process.platform !== 'win32') return;
+  try {
+    execSync(
+      `powershell -NoProfile -Command "$vivos = (Get-Process).Id; Get-CimInstance Win32_Process -Filter \"Name='postgres.exe'\" | Where-Object { $_.CommandLine -match 'embedded-postgres' -and ($vivos -notcontains $_.ParentProcessId) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"`,
+      { stdio: 'ignore', timeout: 20000 }
+    );
+  } catch {
+    /* si no se puede limpiar, se sigue igual */
+  }
+}
+
 async function iniciarEntorno({ env: envExtra = {} } = {}) {
+  limpiarPostgresHuerfanos();
   let pgEmbebido = null;
   let databaseUrl = process.env.TEST_DATABASE_URL;
   if (!databaseUrl) {
@@ -97,6 +112,7 @@ async function iniciarEntorno({ env: envExtra = {} } = {}) {
       await db.end().catch(() => {});
       servidor.kill();
       if (pgEmbebido) await pgEmbebido.stop().catch(() => {});
+      limpiarPostgresHuerfanos();
     },
   };
 }

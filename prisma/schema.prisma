@@ -58,7 +58,6 @@ model Lugar {
   audioUrl        String?
   paradas         ParadaRuta[]
   negocio         Negocio?
-  comentarios     ComentarioAdmin[]
   createdAt       DateTime      @default(now())
 }
 
@@ -103,6 +102,8 @@ model Negocio {
   whatsapp       String
   totpSecret     String?
   esAdmin        Boolean  @default(false)
+  // Administrador con la facultad de autorizar escalamientos (segunda persona del procedimiento de excepción). Se asigna a mano en la base.
+  esResponsable  Boolean  @default(false)
   createdAt      DateTime @default(now())
   // Constancia de que el titular aceptó los Términos y la Política de Privacidad al registrarse
   // (Ley 787: consentimiento libre, específico e informado). Quedan en null para las cuentas que
@@ -113,20 +114,6 @@ model Negocio {
   lugar          Lugar?   @relation(fields: [lugarId], references: [id])
   sesiones       Sesion[]
   restablecimientos RestablecerPassword[]
-}
-
-// Nota que el equipo de GeoKaia le deja a un negocio sobre su lugar (qué corregir, por qué se rechazó, etc.).
-// Reemplaza a la edición directa del lugar por parte del admin: el negocio es quien corrige lo suyo.
-model ComentarioAdmin {
-  id         Int      @id @default(autoincrement())
-  lugarId    Int
-  lugar      Lugar    @relation(fields: [lugarId], references: [id], onDelete: Cascade)
-  // Se guarda el correo del admin que lo escribió (viene del JWT firmado) para saber quién dejó cada nota.
-  autorEmail String
-  texto      String
-  createdAt  DateTime @default(now())
-
-  @@index([lugarId])
 }
 
 // Sesión iniciada (tras contraseña + 2FA). La cookie lleva un identificador aleatorio; aquí solo se guarda su hash.

@@ -191,7 +191,6 @@ Copiá `.env.example` a `.env` y completá:
 | `GROQ_API_KEY` | Sí | API Key de Groq, usada por el agente de recomendación de rutas |
 | `PORT` | No | Puerto del servidor. Default `4000` si no se define |
 | `CORS_ORIGINS` | No | Orígenes del navegador autorizados a llamar a la API, separados por coma. Se suman a los dominios del frontend (`geokaia.vercel.app` y `geo-kaia-frontend.vercel.app`); `localhost` siempre se permite para desarrollo |
-| `ADMIN_EDICION_LUGARES` | No | `true` reactiva la edición de lugares ajenos por parte del admin (`PATCH /api/lugares/admin/:id`). Default apagado |
 | `COOKIE_SECURE` | No | Fuerza (`true`) o quita (`false`) el atributo `Secure` de la cookie de sesión. Por defecto es `Secure` cuando `NODE_ENV=production` |
 | `TRUST_PROXY_HOPS` | No | Cantidad de proxies delante del backend (default `1`). Con el frontend reenviando `/api` por rewrites (Vercel) o con Nginx delante, poné `2` para que los límites de peticiones cuenten por visitante |
 | `SESION_MAX_HORAS` | No | Duración máxima absoluta de una sesión, en horas (default `8`) |
@@ -265,18 +264,13 @@ Base URL: `https://geokaia-backend.onrender.com` (o `http://localhost:4000` en l
 | GET | `/` | 🔓 | Lista los lugares con `estado: APROBADO` (lo que se ve en el mapa público) |
 | GET | `/:id` | 🔓 | Un lugar aprobado, con las rutas donde aparece (no expone datos del negocio dueño) |
 | GET | `/mi-lugar` | 🔒 | El lugar del negocio autenticado (para precargar su panel) |
-| GET | `/mi-lugar/comentarios` | 🔒 | Comentarios del equipo en el lugar propio (solo lectura, sin el correo del admin) |
 | POST | `/` | 🔒 | Crea el lugar del negocio (tier Gratis/Premium), queda `PENDIENTE` |
 | PATCH | `/mi-lugar` | 🔒 | Edita el contenido del lugar propio (campos premium se ignoran si el tier es Gratis) |
 | DELETE | `/mi-lugar` | 🔒 | Borra el lugar (mantiene la cuenta), pide la contraseña |
-| GET | `/admin/pendientes` | 👑 | Lista lugares en cola de aprobación |
-| PATCH | `/admin/:id/estado` | 👑 | Aprueba o rechaza un lugar |
-| GET | `/admin/todos` | 👑 | Lista todos los lugares, de cualquier estado |
-| PATCH | `/admin/:id` | 👑 | Edita cualquier lugar. **Desactivado por defecto** (responde 403): el equipo deja comentarios y cada negocio corrige lo suyo. Se reactiva con `ADMIN_EDICION_LUGARES=true` |
-| DELETE | `/admin/:id` | 👑 | Borra cualquier lugar (y sus comentarios) |
-| GET | `/admin/:id/comentarios` | 👑 | Lista los comentarios que el equipo dejó en un lugar |
-| POST | `/admin/:id/comentarios` | 👑 | Deja un comentario para el negocio (3 a 1000 caracteres); queda con el correo del admin |
-| DELETE | `/admin/comentarios/:comentarioId` | 👑 | Borra un comentario |
+| — | *no existe ninguna ruta para que un administrador cree, edite o borre el lugar de otro negocio* | — | Ver «Roles y permisos» |
+| GET | `/admin/pendientes` | 👑 | Lista lugares en cola de aprobación (solo lectura; sin correo ni WhatsApp del dueño) |
+| PATCH | `/admin/:id/estado` | 👑 | Aprueba o rechaza un lugar **pendiente**. Con un lugar ya revisado responde 409: cambiar su visibilidad es una excepción (escalamiento) |
+| GET | `/admin/todos` | 👑 | Lista todos los lugares para supervisar (solo lectura) |
 
 ### Rutas — `/api/rutas`
 
@@ -329,6 +323,21 @@ curl -X PATCH https://geokaia-backend.onrender.com/api/lugares/mi-lugar \
 ```
 
 ---
+
+## Roles y permisos (RBAC)
+
+Toda decisión de acceso se toma **en el servidor, en cada petición** (`src/rbac/permisos.js`). El rol sale de la base de datos junto con la sesión (`esAdmin`, `esResponsable`), nunca del navegador: ocultar botones no protege nada y aquí no se confía en ellos.
+
+| Rol | Quién es | Puede | No puede |
+|---|---|---|---|
+| **PROPIETARIO** | Dueño de un negocio | Crear, editar y borrar **su** lugar; gestionar su cuenta; leer y responder los mensajes de **su** negocio | Ver o tocar el negocio de otro, usar rutas de supervisión o de administración |
+| **ADMIN** | Equipo de GeoKaia | Supervisar (solo lectura), aprobar o rechazar lugares **nuevos**, administrar rutas (contenido de la plataforma), conversar con los negocios, pedir un escalamiento, ver la auditoría, cerrar las sesiones de una cuenta en un incidente | **Crear, editar o borrar** la información de un negocio ajeno; ser propietario (usar `mi-lugar`); autorizar escalamientos |
+| **RESPONSABLE** | Administrador con la facultad extra de autorizar | Todo lo de ADMIN + autorizar o rechazar escalamientos de otro administrador | Lo mismo que ADMIN sobre negocios ajenos, salvo por el procedimiento de escalamiento |
+
+- **Propiedad:** cada negocio está vinculado a su cuenta (`Negocio.lugarId`). Las rutas del propietario (`/mi-lugar`) **no reciben ningún id**: el negocio sale de la sesión, así que no hay forma de apuntar al de otra persona (IDOR). Un id ajeno en una conversación responde 404 idéntico a «no existe» y queda auditado.
+- **Mínimo privilegio:** cada rol tiene solo los permisos listados en `PERMISOS`; las pruebas verifican que ninguno incluye editar o borrar negocios ajenos.
+- **Los roles no se asignan por la API:** `esAdmin` y `esResponsable` se ponen a mano en la base; el registro público ignora esos campos.
+- **Auditoría:** cada acción relevante y cada acceso denegado queda en el historial inmutable (`/api/admin/auditoria`).
 
 ## Seguridad
 
