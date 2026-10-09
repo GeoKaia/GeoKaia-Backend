@@ -43,3 +43,6 @@ exports.limiteLeads = crear(60, 15, 'Ya recibimos varios mensajes desde esta con
 
 // Chat de Kaia: cada consulta llama al modelo de IA.
 exports.limiteIA = crear(1, 20, 'Kaia está atendiendo muchas consultas. Esperá un momento e intentá de nuevo.');
+
+// Recuperación de contraseña: pocas solicitudes por IP (además del tope por cuenta que aplica el controlador).
+exports.limiteRecuperacion = crear(60, 10, 'Demasiadas solicitudes de recuperación desde esta conexión. Probá de nuevo en una hora.');

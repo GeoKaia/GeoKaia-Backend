@@ -112,6 +112,7 @@ model Negocio {
   lugarId        Int?     @unique
   lugar          Lugar?   @relation(fields: [lugarId], references: [id])
   sesiones       Sesion[]
+  restablecimientos RestablecerPassword[]
 }
 
 // Nota que el equipo de GeoKaia le deja a un negocio sobre su lugar (qué corregir, por qué se rechazó, etc.).
@@ -170,4 +171,19 @@ model Auditoria {
   @@index([accion, creadaEn])
   @@index([actorId])
   @@index([negocioAfectadoId])
+}
+
+// Enlace de restablecimiento de contraseña: token aleatorio de un solo uso. Solo se guarda su hash; vence a los 30
+// minutos y se anula al usarse o al pedir otro.
+model RestablecerPassword {
+  id        Int       @id @default(autoincrement())
+  negocioId Int
+  negocio   Negocio   @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiraEn  DateTime
+  usadoEn   DateTime?
+  intentos  Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  @@index([negocioId])
 }

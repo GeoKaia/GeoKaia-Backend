@@ -6,11 +6,11 @@ const authController = require('../controllers/auth.controller');
 const validarId = require('../middleware/validarId.middleware');
 const authMiddleware = require('../middleware/auth.middleware');
 const { passwordSchema: passwordNuevaSchema, contieneCorreo } = require('../utils/password');
-const { limiteLogin, limite2FAPorIp, limite2FAPorCuenta, limiteRegistro } = require('../middleware/limites.middleware');
+const { limiteLogin, limite2FAPorIp, limite2FAPorCuenta, limiteRegistro, limiteRecuperacion } = require('../middleware/limites.middleware');
 
-// bcrypt solo usa los primeros 72 bytes de la contraseña: el tope evita además que alguien mande
-// megabytes de texto para que el servidor gaste CPU en el hash.
-const passwordSchema = z.string().min(1, 'La contraseña es obligatoria').max(72, 'La contraseña es demasiado larga');
+// Al iniciar sesión solo se acota el tamaño (para que nadie mande megabytes y gaste CPU en el hash); la política de
+// complejidad se aplica al crear o cambiar la contraseña, no al entrar, para no dejar afuera a cuentas anteriores.
+const passwordSchema = z.string().min(1, 'La contraseña es obligatoria').max(128, 'La contraseña es demasiado larga');
 
 const eliminarCuentaSchema = z.object({
   password: passwordSchema,
@@ -43,11 +43,29 @@ const registrarSchema = z.object({
   }
 });
 
+// Cambio de contraseña estando con sesión: contraseña actual + código 2FA + contraseña nueva (política completa).
+const cambiarPasswordSchema = z.object({
+  passwordActual: passwordSchema,
+  passwordNueva: z.string().min(1, 'La contraseña nueva es obligatoria').max(128, 'La contraseña es demasiado larga'),
+  codigo2fa: z.string().regex(/^\d{6}$/, 'El código debe tener 6 dígitos'),
+});
+
+const olvidePasswordSchema = z.object({ email: z.string().email('El correo no es válido').max(254, 'El correo es demasiado largo') });
+
+const restablecerPasswordSchema = z.object({
+  token: z.string().min(20, 'Enlace inválido').max(200, 'Enlace inválido'),
+  password: z.string().min(1, 'La contraseña es obligatoria').max(128, 'La contraseña es demasiado larga'),
+  codigo2fa: z.string().regex(/^\d{6}$/, 'El código debe tener 6 dígitos'),
+});
+
 router.param('id', validarId);
 
 router.post('/registrar', limiteRegistro, validate(registrarSchema), authController.registrar);
 router.post('/login', limiteLogin, validate(loginSchema), authController.login);
 router.post('/verificar-2fa', limite2FAPorIp, limite2FAPorCuenta, validate(verificar2FASchema), authController.verificar2FA);
+router.post('/cambiar-password', authMiddleware, validate(cambiarPasswordSchema), authController.cambiarPassword);
+router.post('/olvide-password', limiteRecuperacion, validate(olvidePasswordSchema), authController.olvidePassword);
+router.post('/restablecer-password', limiteRecuperacion, validate(restablecerPasswordSchema), authController.restablecerPassword);
 router.get('/me', authMiddleware, authController.me);
 router.post('/logout', authController.logout);
 router.post('/logout-todas', authMiddleware, authController.logoutTodas);
