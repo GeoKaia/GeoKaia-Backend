@@ -1,34 +1,30 @@
-const jwt = require('jsonwebtoken');
-const { leerToken } = require('../utils/sesion');
-const { renovarDesdeRefresco } = require('../utils/refresco');
+const sesiones = require('../services/sesiones');
+const { borrarCookie } = require('../utils/sesion');
 const { responderError } = require('../utils/errores');
 
+// Autenticación obligatoria. La identidad y el rol salen SIEMPRE de la base de datos (tabla Sesion + Negocio), nunca
+// de lo que mande el navegador: cambiar o borrar datos locales no da ni quita privilegios.
+//   req.negocio = { id, email, esAdmin }      req.sesion = { id, ... }
+const MENSAJES = {
+  sin_cookie: 'Token requerido: iniciá sesión para continuar',
+  desconocida: 'Sesión no válida: iniciá sesión de nuevo',
+  revocada: 'Sesión cerrada: iniciá sesión de nuevo',
+  expirada: 'Sesión vencida: iniciá sesión de nuevo',
+  inactividad: 'Sesión vencida por inactividad: iniciá sesión de nuevo',
+};
+
 module.exports = async (req, res, next) => {
-  // El token viaja solo en la cookie httpOnly (ver utils/sesion.js): ya no se acepta por cabecera.
-  const token = leerToken(req);
-
-  if (token) {
-    try {
-      // Se fija el algoritmo para que nadie pueda presentar un token firmado con otro (por ejemplo 'none').
-      req.negocio = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ['HS256'] });
-      return next();
-    } catch (err) {
-      // Vencido o inválido: se intenta con la cookie de dispositivo antes de rechazar.
-    }
-  }
-
-  // Sin cookie de acceso (por ejemplo la borraron desde F12) o vencida: si este dispositivo sigue registrado,
-  // se emite una cookie de acceso nueva y la persona no se desloguea.
   try {
-    const datos = await renovarDesdeRefresco(req, res);
-    if (datos) {
-      req.negocio = datos;
-      return next();
+    const r = await sesiones.validar(req);
+    if (!r.ok) {
+      // Cookie presente pero inservible: se borra del navegador para no seguir mandándola.
+      if (r.motivo !== 'sin_cookie') borrarCookie(res);
+      return res.status(401).json({ error: MENSAJES[r.motivo] || MENSAJES.desconocida, codigo: r.motivo });
     }
+    req.negocio = r.negocio;
+    req.sesion = r.sesion;
+    next();
   } catch (err) {
-    return responderError(res, err, 'Error al validar la sesión');
+    responderError(res, err, 'Error al validar la sesión');
   }
-
-  if (token) return res.status(403).json({ error: 'Token inválido o expirado' });
-  return res.status(401).json({ error: 'Token requerido' });
 };

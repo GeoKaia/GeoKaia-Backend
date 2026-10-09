@@ -3,6 +3,7 @@ const router = express.Router();
 const { z } = require('zod');
 const validate = require('../middleware/validate.middleware');
 const authController = require('../controllers/auth.controller');
+const validarId = require('../middleware/validarId.middleware');
 const authMiddleware = require('../middleware/auth.middleware');
 const { passwordSchema: passwordNuevaSchema, contieneCorreo } = require('../utils/password');
 const { limiteLogin, limite2FAPorIp, limite2FAPorCuenta, limiteRegistro } = require('../middleware/limites.middleware');
@@ -20,9 +21,9 @@ const loginSchema = z.object({
   password: passwordSchema,
 });
 
-// El código TOTP son exactamente 6 dígitos; el id es el que devolvió el login.
+// El código TOTP son exactamente 6 dígitos; el pasoToken es el que devolvió el login (firmado, vale 5 minutos).
 const verificar2FASchema = z.object({
-  negocioId: z.number().int().positive('negocioId inválido'),
+  pasoToken: z.string().min(10, 'Falta el paso anterior del inicio de sesión').max(2000, 'pasoToken inválido'),
   token: z.string().regex(/^\d{6}$/, 'El código debe tener 6 dígitos'),
 });
 
@@ -42,11 +43,16 @@ const registrarSchema = z.object({
   }
 });
 
+router.param('id', validarId);
+
 router.post('/registrar', limiteRegistro, validate(registrarSchema), authController.registrar);
 router.post('/login', limiteLogin, validate(loginSchema), authController.login);
 router.post('/verificar-2fa', limite2FAPorIp, limite2FAPorCuenta, validate(verificar2FASchema), authController.verificar2FA);
 router.get('/me', authMiddleware, authController.me);
 router.post('/logout', authController.logout);
+router.post('/logout-todas', authMiddleware, authController.logoutTodas);
+router.get('/sesiones', authMiddleware, authController.listarSesiones);
+router.delete('/sesiones/:id', authMiddleware, authController.revocarSesion);
 router.delete('/cuenta', authMiddleware, validate(eliminarCuentaSchema), authController.eliminarCuenta);
 
 module.exports = router;

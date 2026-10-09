@@ -111,7 +111,7 @@ model Negocio {
   terminosVersion  String?
   lugarId        Int?     @unique
   lugar          Lugar?   @relation(fields: [lugarId], references: [id])
-  sesiones       SesionRefresco[]
+  sesiones       Sesion[]
 }
 
 // Nota que el equipo de GeoKaia le deja a un negocio sobre su lugar (qué corregir, por qué se rechazó, etc.).
@@ -128,16 +128,21 @@ model ComentarioAdmin {
   @@index([lugarId])
 }
 
-// "Dispositivo" de una sesión iniciada con 2FA. La cookie gk_dispositivo lleva un token aleatorio; aquí solo se guarda su
-// hash. Permite renovar la cookie de acceso (8 h) sin repetir el login mientras el dispositivo siga registrado.
-// Se borra al cerrar sesión, al vencer o al borrarse la cuenta.
-model SesionRefresco {
-  id        Int      @id @default(autoincrement())
-  negocioId Int
-  negocio   Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
-  tokenHash String   @unique
-  expiraEn  DateTime
-  createdAt DateTime @default(now())
+// Sesión iniciada (tras contraseña + 2FA). La cookie lleva un identificador aleatorio; aquí solo se guarda su hash.
+// El servidor decide la vigencia: expira por duración máxima (expiraEn) y por inactividad (ultimaActividad), y se
+// puede revocar en cualquier momento (revocadaEn).
+model Sesion {
+  id               Int       @id @default(autoincrement())
+  tokenHash        String    @unique
+  negocioId        Int
+  negocio          Negocio   @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  creadaEn         DateTime  @default(now())
+  ultimaActividad  DateTime  @default(now())
+  expiraEn         DateTime
+  revocadaEn       DateTime?
+  motivoRevocacion String?
+  ip               String?
+  userAgent        String?
 
   @@index([negocioId])
 }
