@@ -20,4 +20,15 @@ const validate = (schema) => (req, res, next) => {
   }
 };
 
+// Igual que validate, pero para el query string: deja el resultado validado en req.consulta (nadie lee req.query sin validar).
+const validateQuery = (schema) => (req, res, next) => {
+  const r = schema.safeParse(req.query);
+  if (!r.success) {
+    return res.status(400).json({ error: 'Parámetros inválidos', detalles: r.error.issues.map((e) => ({ campo: e.path[0], mensaje: e.message })) });
+  }
+  req.consulta = r.data;
+  next();
+};
+
 module.exports = validate;
+module.exports.validateQuery = validateQuery;

@@ -46,3 +46,6 @@ exports.limiteIA = crear(1, 20, 'Kaia está atendiendo muchas consultas. Esperá
 
 // Recuperación de contraseña: pocas solicitudes por IP (además del tope por cuenta que aplica el controlador).
 exports.limiteRecuperacion = crear(60, 10, 'Demasiadas solicitudes de recuperación desde esta conexión. Probá de nuevo en una hora.');
+
+// Mensajes entre el equipo y los negocios: uso normal es conversacional; el tope frena el spam desde una cuenta o conexión.
+exports.limiteMensajes = crear(1, 30, 'Estás enviando mensajes muy rápido. Esperá un momento e intentá de nuevo.');

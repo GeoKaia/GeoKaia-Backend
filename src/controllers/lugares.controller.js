@@ -204,7 +204,6 @@ exports.eliminarMiLugar = async (req, res) => {
     });
 
     await auditoria.registrar({ req, accion: 'lugar.eliminar', recurso: { tipo: 'Lugar', id: lugarId }, negocioAfectadoId: negocioId });
-    await auditoria.registrar({ req, accion: 'lugar.eliminar_admin', recurso: { tipo: 'Lugar', id: lugarId }, negocioAfectadoId: duenoId });
     res.json({ mensaje: 'Lugar eliminado correctamente' });
   } catch (error) {
     responderError(res, error, 'Error al eliminar el lugar');

@@ -324,6 +324,24 @@ curl -X PATCH https://geokaia-backend.onrender.com/api/lugares/mi-lugar \
 
 ---
 
+### Mensajería entre el equipo y los negocios
+
+Canal oficial para reportar mejoras, pedir correcciones y conversar **sin que el equipo modifique los datos del negocio**. Cada conversación pertenece a un negocio, queda vinculada a su lugar y conserva el historial: los mensajes no se editan ni se borran (un trigger de la base lo impide), cada uno guarda remitente, fecha y hora, y cuándo lo leyó el destinatario (Enviado / Leído). Estados: `ABIERTA`, `EN_SEGUIMIENTO`, `RESUELTA`. El negocio no ve el nombre ni el correo del administrador ("Equipo GeoKaia"). Que un administrador lea una conversación privada queda en la auditoría (sin copiar el texto).
+
+| Método | Ruta | Acceso | Descripción |
+|---|---|---|---|
+| GET | `/api/mensajes/conversaciones` | 🔒 propietario | Sus conversaciones, con mensajes sin leer |
+| GET | `/api/mensajes/conversaciones/:id` | 🔒 propietario | El hilo (marca como leídos los mensajes del equipo). Con el id de otro negocio responde 404 idéntico a «no existe» y queda auditado |
+| POST | `/api/mensajes/conversaciones/:id/mensajes` | 🔒 propietario | Responde (1 a 2000 caracteres; reabre una conversación resuelta) |
+| PATCH | `/api/mensajes/conversaciones/:id/estado` | 🔒 propietario | Marca `RESUELTA` o reabre (`ABIERTA`) |
+| GET | `/api/mensajes/no-leidos` | 🔒 propietario | Cantidad de mensajes nuevos (notificación) |
+| POST | `/api/admin/conversaciones` | 👑 | Abre una conversación con el propietario de un lugar |
+| GET | `/api/admin/conversaciones` | 👑 | Bandeja con filtros `estado`, `lugarId`, `negocioId` |
+| GET | `/api/admin/conversaciones/:id` | 👑 | El hilo completo (auditado) |
+| POST | `/api/admin/conversaciones/:id/mensajes` | 👑 | Envía una observación o solicitud de corrección (avisa al negocio por correo, sin el contenido) |
+| PATCH | `/api/admin/conversaciones/:id/estado` | 👑 | Cambia el estado |
+| GET | `/api/admin/conversaciones/no-leidos` | 👑 | Respuestas de negocios sin leer |
+
 ## Staging local (probar la rama `staging` sin tocar producción)
 
 ```bash

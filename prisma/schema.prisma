@@ -58,6 +58,7 @@ model Lugar {
   audioUrl        String?
   paradas         ParadaRuta[]
   negocio         Negocio?
+  conversaciones  Conversacion[]
   createdAt       DateTime      @default(now())
 }
 
@@ -113,6 +114,7 @@ model Negocio {
   lugarId        Int?     @unique
   lugar          Lugar?   @relation(fields: [lugarId], references: [id])
   sesiones       Sesion[]
+  conversaciones Conversacion[]
   restablecimientos RestablecerPassword[]
 }
 
@@ -173,4 +175,47 @@ model RestablecerPassword {
   createdAt DateTime  @default(now())
 
   @@index([negocioId])
+}
+
+enum EstadoConversacion {
+  ABIERTA
+  EN_SEGUIMIENTO
+  RESUELTA
+}
+
+// Conversación entre el equipo de GeoKaia y UN negocio (canal oficial: reemplaza a que un administrador modifique el
+// perfil de otro). Pertenece al negocio (negocioId): solo su propietario y los administradores la leen. Si se borra el lugar
+// o la cuenta, la conversación se conserva como historial (SetNull).
+model Conversacion {
+  id            Int                @id @default(autoincrement())
+  lugarId       Int?
+  lugar         Lugar?             @relation(fields: [lugarId], references: [id], onDelete: SetNull)
+  lugarNombre   String
+  negocioId     Int?
+  negocio       Negocio?           @relation(fields: [negocioId], references: [id], onDelete: SetNull)
+  asunto        String
+  estado        EstadoConversacion @default(ABIERTA)
+  creadaPorId   Int
+  creadaEn      DateTime           @default(now())
+  actualizadaEn DateTime           @default(now())
+  mensajes      Mensaje[]
+
+  @@index([negocioId, actualizadaEn])
+  @@index([estado, actualizadaEn])
+}
+
+// Mensaje de una conversación. No se edita ni se borra (un trigger de la base lo impide: solo se puede marcar como leído).
+// leidoEn = cuándo lo leyó el destinatario ("Enviado" / "Leído").
+model Mensaje {
+  id             Int          @id @default(autoincrement())
+  conversacionId Int
+  conversacion   Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  autorId        Int?
+  autorRol       String // ADMIN | PROPIETARIO | SISTEMA
+  autorNombre    String
+  texto          String
+  creadoEn       DateTime     @default(now())
+  leidoEn        DateTime?
+
+  @@index([conversacionId, creadoEn])
 }
