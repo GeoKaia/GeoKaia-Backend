@@ -34,7 +34,16 @@ async function iniciarEntorno({ env: envExtra = {} } = {}) {
     const EmbeddedPostgres = require('embedded-postgres').default;
     const puertoDb = await puertoLibre();
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'geokaia-pg-'));
-    pgEmbebido = new EmbeddedPostgres({ databaseDir: dir, user: 'postgres', password: 'postgres', port: puertoDb, persistent: false });
+    // Base descartable: sin fsync (más rápida y sin cuelgues de initdb en discos lentos o con antivirus).
+    pgEmbebido = new EmbeddedPostgres({
+      databaseDir: dir,
+      user: 'postgres',
+      password: 'postgres',
+      port: puertoDb,
+      persistent: false,
+      initdbFlags: ['--no-sync'],
+      postgresFlags: ['-c', 'fsync=off', '-c', 'synchronous_commit=off', '-c', 'full_page_writes=off'],
+    });
     await pgEmbebido.initialise();
     await pgEmbebido.start();
     await pgEmbebido.createDatabase('geokaia');
