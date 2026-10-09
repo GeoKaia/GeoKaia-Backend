@@ -306,3 +306,66 @@ exports.eliminarLugarAdmin = async (req, res) => {
     responderError(res, error, 'Error al eliminar el lugar');
   }
 };
+
+// --- Comentarios del equipo hacia los negocios ---
+// En vez de editar el lugar de otra persona (ver nota arriba y ADMIN_EDICION_LUGARES en las rutas), el admin
+// le deja una nota al negocio y es el negocio quien corrige lo suyo.
+
+// 12. [Admin] Dejar un comentario en un lugar
+exports.crearComentarioAdmin = async (req, res) => {
+  try {
+    const lugarId = parseInt(req.params.id);
+    const lugar = await prisma.lugar.findUnique({ where: { id: lugarId } });
+    if (!lugar) return res.status(404).json({ error: 'Lugar no encontrado' });
+
+    const comentario = await prisma.comentarioAdmin.create({
+      data: { lugarId, autorEmail: req.negocio.email, texto: req.body.texto.trim() },
+    });
+    res.status(201).json({ mensaje: 'Comentario guardado', comentario });
+  } catch (error) {
+    responderError(res, error, 'Error al guardar el comentario');
+  }
+};
+
+// 13. [Admin] Ver los comentarios de un lugar
+exports.listarComentariosAdmin = async (req, res) => {
+  try {
+    const comentarios = await prisma.comentarioAdmin.findMany({
+      where: { lugarId: parseInt(req.params.id) },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(comentarios);
+  } catch (error) {
+    responderError(res, error, 'Error al obtener los comentarios');
+  }
+};
+
+// 14. [Admin] Borrar un comentario
+exports.eliminarComentarioAdmin = async (req, res) => {
+  try {
+    const id = Number(req.params.comentarioId);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'ID inválido' });
+    const existente = await prisma.comentarioAdmin.findUnique({ where: { id } });
+    if (!existente) return res.status(404).json({ error: 'Comentario no encontrado' });
+    await prisma.comentarioAdmin.delete({ where: { id } });
+    res.json({ mensaje: 'Comentario eliminado' });
+  } catch (error) {
+    responderError(res, error, 'Error al eliminar el comentario');
+  }
+};
+
+// 15. [Negocio] Ver los comentarios que el equipo dejó en MI lugar (solo lectura)
+exports.obtenerMisComentarios = async (req, res) => {
+  try {
+    const negocio = await prisma.negocio.findUnique({ where: { id: req.negocio.id } });
+    if (!negocio?.lugarId) return res.json([]);
+    const comentarios = await prisma.comentarioAdmin.findMany({
+      where: { lugarId: negocio.lugarId },
+      select: { id: true, texto: true, createdAt: true }, // el correo del admin no se le muestra al negocio
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(comentarios);
+  } catch (error) {
+    responderError(res, error, 'Error al obtener los comentarios');
+  }
+};

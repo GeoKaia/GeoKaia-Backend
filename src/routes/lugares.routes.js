@@ -99,11 +99,25 @@ const actualizarLugarAdminSchema = z.object({
   message: 'Debés enviar al menos un campo para actualizar',
 });
 
+// [Admin] nota para el negocio: reemplaza a la edición directa de su lugar.
+const comentarioSchema = z.object({
+  texto: z.string().trim().min(3, 'El comentario debe tener al menos 3 caracteres').max(1000, 'El comentario no puede pasar de 1000 caracteres'),
+});
+
+// La edición directa de lugares ajenos está APAGADA por defecto (es mala señal que el equipo cambie lo que
+// escribió cada negocio). Se puede reactivar sin tocar código con ADMIN_EDICION_LUGARES=true, por ejemplo
+// para cargar contenido real antes de una entrega. Borrar y aprobar/rechazar siguen disponibles.
+const edicionAdminHabilitada = (req, res, next) => {
+  if (process.env.ADMIN_EDICION_LUGARES === 'true') return next();
+  res.status(403).json({ error: 'La edición directa de lugares está desactivada. Dejale un comentario al negocio para que lo corrija él mismo.' });
+};
+
 // IMPORTANTE: '/mi-lugar' y '/admin/*' van antes de '/:id' para que Express no las confunda con un ID
 router.param('id', validarId);
 
 router.get('/', lugaresController.obtenerTodos);
 router.get('/mi-lugar', authMiddleware, lugaresController.obtenerMiLugar);
+router.get('/mi-lugar/comentarios', authMiddleware, lugaresController.obtenerMisComentarios);
 router.get('/admin/pendientes', authMiddleware, adminMiddleware, lugaresController.obtenerPendientes);
 router.get('/admin/todos', authMiddleware, adminMiddleware, lugaresController.obtenerTodosAdmin);
 router.get('/:id', lugaresController.obtenerPorId);
@@ -112,7 +126,10 @@ router.post('/', authMiddleware, validate(crearLugarSchema), lugaresController.c
 router.patch('/mi-lugar', authMiddleware, validate(actualizarLugarSchema), lugaresController.actualizarMiLugar);
 router.delete('/mi-lugar', authMiddleware, validate(eliminarLugarSchema), lugaresController.eliminarMiLugar);
 router.patch('/admin/:id/estado', authMiddleware, adminMiddleware, validate(actualizarEstadoSchema), lugaresController.actualizarEstado);
-router.patch('/admin/:id', authMiddleware, adminMiddleware, validate(actualizarLugarAdminSchema), lugaresController.actualizarLugarAdmin);
+router.patch('/admin/:id', authMiddleware, adminMiddleware, edicionAdminHabilitada, validate(actualizarLugarAdminSchema), lugaresController.actualizarLugarAdmin);
+router.get('/admin/:id/comentarios', authMiddleware, adminMiddleware, lugaresController.listarComentariosAdmin);
+router.post('/admin/:id/comentarios', authMiddleware, adminMiddleware, validate(comentarioSchema), lugaresController.crearComentarioAdmin);
+router.delete('/admin/comentarios/:comentarioId', authMiddleware, adminMiddleware, lugaresController.eliminarComentarioAdmin);
 router.delete('/admin/:id', authMiddleware, adminMiddleware, lugaresController.eliminarLugarAdmin);
 
 module.exports = router;
